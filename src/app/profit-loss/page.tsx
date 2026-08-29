@@ -1,6 +1,15 @@
 import { requireUser } from "@/lib/supabase/require-user";
 import type { Ipo, PanCard, ProfitRecord } from "@/lib/types";
 import { ProfitForm } from "./profit-form";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +42,7 @@ export default async function ProfitLossPage() {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-semibold">My Profit &amp; Loss</h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-6 text-sm text-muted-foreground">
         This is your own data only — other pool members&apos; entries never appear here.
       </p>
 
@@ -41,45 +50,52 @@ export default async function ProfitLossPage() {
         <ProfitForm ipos={ipos ?? []} panCards={panCards ?? []} />
       </div>
 
-      <div className="mb-4 rounded-lg bg-gray-50 p-4 text-sm">
-        Total net profit: <span className="font-semibold">₹{totalNet.toFixed(2)}</span>
+      <div className="mb-4 rounded-lg bg-muted p-4 text-sm">
+        Total net profit:{" "}
+        <span className={`font-semibold ${totalNet < 0 ? "text-destructive" : "text-success"}`}>
+          ₹{totalNet.toFixed(2)}
+        </span>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-500">
-            <tr>
-              <th className="px-3 py-2">IPO</th>
-              <th className="px-3 py-2">Deducted</th>
-              <th className="px-3 py-2">Received</th>
-              <th className="px-3 py-2">Gross</th>
-              <th className="px-3 py-2">Tax</th>
-              <th className="px-3 py-2">Net</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records?.map((r) => (
-              <tr key={r.id} className="border-t">
-                <td className="px-3 py-2">{r.ipos?.name ?? "—"}</td>
-                <td className="px-3 py-2">₹{r.amount_deducted}</td>
-                <td className="px-3 py-2">₹{r.amount_received}</td>
-                <td className="px-3 py-2">₹{r.gross_profit}</td>
-                <td className="px-3 py-2">₹{r.tax}</td>
-                <td className={`px-3 py-2 font-medium ${Number(r.net_profit) < 0 ? "text-red-600" : "text-green-600"}`}>
-                  ₹{r.net_profit}
-                </td>
-              </tr>
-            ))}
-            {(!records || records.length === 0) && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-500">
-                  No entries yet — log one above.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>IPO</TableHead>
+                <TableHead>Deducted</TableHead>
+                <TableHead>Received</TableHead>
+                <TableHead>Gross</TableHead>
+                <TableHead>Tax</TableHead>
+                <TableHead>Net</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {records?.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.ipos?.name ?? "—"}</TableCell>
+                  <TableCell>₹{r.amount_deducted}</TableCell>
+                  <TableCell>₹{r.amount_received}</TableCell>
+                  <TableCell>₹{r.gross_profit}</TableCell>
+                  <TableCell>₹{r.tax}</TableCell>
+                  <TableCell
+                    className={`font-medium ${Number(r.net_profit) < 0 ? "text-destructive" : "text-success"}`}
+                  >
+                    ₹{r.net_profit}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {(!records || records.length === 0) && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                    No entries yet — log one above.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </main>
   );
 }

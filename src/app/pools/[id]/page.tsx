@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
 import { maskPan, type Ipo, type PanCard } from "@/lib/types";
 import { ApplicationForm } from "./application-form";
+import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
 
@@ -59,19 +60,19 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-semibold">{pool.name}</h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-6 text-sm text-muted-foreground">
         Invite code: <span className="font-mono">{pool.invite_code}</span> — share this with people you trust.
       </p>
 
       <section className="mb-8">
         <h2 className="mb-2 font-medium">Members ({members?.length ?? 0})</h2>
-        <ul className="flex flex-wrap gap-2 text-sm">
+        <div className="flex flex-wrap gap-2 text-sm">
           {members?.map((m) => (
-            <li key={m.profile_id} className="rounded-full bg-gray-100 px-3 py-1">
+            <Badge key={m.profile_id} variant="secondary" className="h-auto px-3 py-1">
               {m.profiles?.display_name ?? "Member"}
-            </li>
+            </Badge>
           ))}
-        </ul>
+        </div>
       </section>
 
       <section className="mb-8">
@@ -80,23 +81,24 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
 
       <section>
         <h2 className="mb-2 font-medium">Applications in this pool</h2>
-        <ul className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
           {applications?.map((app) => (
-            <li key={app.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+            <div
+              key={app.id}
+              className="flex items-center justify-between rounded-lg border p-3 text-sm"
+            >
               <span>{app.ipos?.name ?? "Unknown IPO"}</span>
-              <span className="text-gray-500">
+              <span className="text-muted-foreground">
                 {app.pan_cards?.label ?? maskPan(app.pan_cards?.pan_number ?? "")}
               </span>
-              <span className="uppercase text-gray-400">{app.category}</span>
-              <span className={app.status === "applied" ? "text-green-600" : "text-gray-400"}>
-                {app.status}
-              </span>
-            </li>
+              <span className="uppercase text-muted-foreground/70">{app.category}</span>
+              <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
+            </div>
           ))}
           {(!applications || applications.length === 0) && (
-            <p className="text-sm text-gray-500">No applications logged yet.</p>
+            <p className="text-sm text-muted-foreground">No applications logged yet.</p>
           )}
-        </ul>
+        </div>
       </section>
     </main>
   );

@@ -22,12 +22,12 @@ export default async function PoolsPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
       <h1 className="mb-2 text-2xl font-semibold">Your pools</h1>
-      <p className="mb-6 text-sm text-gray-600">
+      <p className="mb-6 text-sm text-muted-foreground">
         Each pool is isolated — members only see the applications and data inside their own pool.
       </p>
 
       {!hasPan && (
-        <p className="mb-6 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="mb-6 rounded-md bg-warning/15 px-3 py-2 text-sm text-warning-foreground">
           You need at least one PAN card before you can create or join a pool.{" "}
           <Link href="/profile/pan" className="underline">
             Add one here
@@ -41,22 +41,21 @@ export default async function PoolsPage() {
         <JoinPoolForm />
       </div>
 
-      <ul className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         {pools?.map((pool) => (
-          <li key={pool.id}>
-            <Link
-              href={`/pools/${pool.id}`}
-              className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-gray-50"
-            >
-              <span className="font-medium">{pool.name}</span>
-              <span className="font-mono text-xs text-gray-400">{pool.invite_code}</span>
-            </Link>
-          </li>
+          <Link
+            key={pool.id}
+            href={`/pools/${pool.id}`}
+            className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted"
+          >
+            <span className="font-medium">{pool.name}</span>
+            <span className="font-mono text-xs text-muted-foreground">{pool.invite_code}</span>
+          </Link>
         ))}
         {(!pools || pools.length === 0) && (
-          <p className="text-sm text-gray-500">You&apos;re not in any pools yet.</p>
+          <p className="text-sm text-muted-foreground">You&apos;re not in any pools yet.</p>
         )}
-      </ul>
+      </div>
     </main>
   );
 }

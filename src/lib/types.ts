@@ -1,6 +1,7 @@
 export type IpoType = "mainboard" | "sme";
 export type IpoStatus = "upcoming" | "open" | "closed" | "listed";
 export type ApplicationCategory = "retail" | "shni" | "bhni";
+export type AllotmentStatus = "pending" | "alloted" | "not_alloted";
 
 export type Ipo = {
   id: string;

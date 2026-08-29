@@ -2,6 +2,9 @@
 
 import { useActionState } from "react";
 import { createPool, joinPool } from "./actions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const initialState = { error: null as string | null };
 
@@ -11,23 +14,20 @@ export function CreatePoolForm() {
   }, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-lg border p-4">
-      <h2 className="font-medium">Create a pool</h2>
-      <input
-        name="name"
-        required
-        placeholder="e.g. Family Pool"
-        className="rounded-md border px-3 py-2 text-sm"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Creating..." : "Create pool"}
-      </button>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    </form>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Create a pool</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form action={formAction} className="flex flex-col gap-2">
+          <Input name="name" required placeholder="e.g. Family Pool" />
+          <Button type="submit" disabled={pending} className="self-start">
+            {pending ? "Creating..." : "Create pool"}
+          </Button>
+          {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -37,22 +37,19 @@ export function JoinPoolForm() {
   }, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-lg border p-4">
-      <h2 className="font-medium">Join a pool</h2>
-      <input
-        name="inviteCode"
-        required
-        placeholder="Invite code"
-        className="rounded-md border px-3 py-2 text-sm"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Joining..." : "Join pool"}
-      </button>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    </form>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Join a pool</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form action={formAction} className="flex flex-col gap-2">
+          <Input name="inviteCode" required placeholder="Invite code" />
+          <Button type="submit" disabled={pending} className="self-start">
+            {pending ? "Joining..." : "Join pool"}
+          </Button>
+          {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+        </form>
+      </CardContent>
+    </Card>
   );
 }

@@ -88,38 +88,20 @@ export async function addApplication(poolId: string, formData: FormData) {
 }
 
 export async function joinPool(formData: FormData) {
-  const { supabase, user } = await requireUser();
+  const { supabase } = await requireUser();
   const inviteCode = String(formData.get("inviteCode") ?? "").trim().toLowerCase();
 
   if (!inviteCode) {
     return { error: "Enter an invite code." };
   }
 
-  if (!(await userHasPanCard(supabase, user.id))) {
-    return { error: "Add at least one PAN card before joining a pool." };
+  const { data: poolId, error } = await supabase.rpc("join_pool_by_invite_code", {
+    code: inviteCode,
+  });
+
+  if (error || !poolId) {
+    return { error: error?.message ?? "Could not join pool." };
   }
 
-  const { data: pool, error: lookupError } = await supabase
-    .from("pools")
-    .select("id")
-    .eq("invite_code", inviteCode)
-    .maybeSingle();
-
-  if (lookupError || !pool) {
-    return { error: "No pool found for that invite code." };
-  }
-
-  const { error: joinError } = await supabase
-    .from("pool_members")
-    .insert({ pool_id: pool.id, profile_id: user.id });
-
-  if (joinError) {
-    return {
-      error: joinError.message.includes("duplicate")
-        ? "You're already a member of this pool."
-        : joinError.message,
-    };
-  }
-
-  redirect(`/pools/${pool.id}`);
+  redirect(`/pools/${poolId}`);
 }

@@ -3,8 +3,13 @@
 import { useActionState } from "react";
 import { addApplication } from "../actions";
 import type { Ipo, PanCard } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 const initialState = { error: null as string | null };
+const selectClass =
+  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function ApplicationForm({
   poolId,
@@ -20,63 +25,66 @@ export function ApplicationForm({
   }, initialState);
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 rounded-lg border p-4">
-      <h2 className="font-medium">Log an application</h2>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Log an application</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form action={formAction} className="flex flex-col gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ipoId">IPO</Label>
+              <select id="ipoId" name="ipoId" required className={selectClass}>
+                <option value="">Select an IPO</option>
+                {ipos.map((ipo) => (
+                  <option key={ipo.id} value={ipo.id}>
+                    {ipo.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          IPO
-          <select name="ipoId" required className="rounded-md border px-3 py-2">
-            <option value="">Select an IPO</option>
-            {ipos.map((ipo) => (
-              <option key={ipo.id} value={ipo.id}>
-                {ipo.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="panCardId">Your PAN card</Label>
+              <select id="panCardId" name="panCardId" required className={selectClass}>
+                <option value="">Select a PAN</option>
+                {panCards.map((pan) => (
+                  <option key={pan.id} value={pan.id}>
+                    {pan.label ? `${pan.label} (${pan.pan_number})` : pan.pan_number}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Your PAN card
-          <select name="panCardId" required className="rounded-md border px-3 py-2">
-            <option value="">Select a PAN</option>
-            {panCards.map((pan) => (
-              <option key={pan.id} value={pan.id}>
-                {pan.label ? `${pan.label} (${pan.pan_number})` : pan.pan_number}
-              </option>
-            ))}
-          </select>
-        </label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="category">Category</Label>
+              <select id="category" name="category" className={selectClass}>
+                <option value="retail">Retail</option>
+                <option value="shni">SHNI</option>
+                <option value="bhni">BHNI</option>
+              </select>
+            </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Category
-          <select name="category" className="rounded-md border px-3 py-2">
-            <option value="retail">Retail</option>
-            <option value="shni">SHNI</option>
-            <option value="bhni">BHNI</option>
-          </select>
-        </label>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="status">Status</Label>
+              <select id="status" name="status" className={selectClass}>
+                <option value="applied">Applied</option>
+                <option value="na">Not applicable</option>
+              </select>
+            </div>
+          </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          Status
-          <select name="status" className="rounded-md border px-3 py-2">
-            <option value="applied">Applied</option>
-            <option value="na">Not applicable</option>
-          </select>
-        </label>
-      </div>
-
-      <button
-        type="submit"
-        disabled={pending || panCards.length === 0}
-        className="self-start rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Saving..." : "Save"}
-      </button>
-      {panCards.length === 0 && (
-        <p className="text-sm text-amber-700">Add a PAN card to your profile before logging an application.</p>
-      )}
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    </form>
+          <Button type="submit" disabled={pending || panCards.length === 0} className="self-start">
+            {pending ? "Saving..." : "Save"}
+          </Button>
+          {panCards.length === 0 && (
+            <p className="text-sm text-warning-foreground">
+              Add a PAN card to your profile before logging an application.
+            </p>
+          )}
+          {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+        </form>
+      </CardContent>
+    </Card>
   );
 }
