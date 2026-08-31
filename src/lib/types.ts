@@ -39,20 +39,6 @@ export type ApplicationMember = {
   profiles: { display_name: string } | null;
 };
 
-export type ProfitRecord = {
-  id: string;
-  profile_id: string;
-  pan_card_id: string | null;
-  ipo_id: string | null;
-  amount_deducted: number;
-  amount_received: number;
-  gross_profit: number;
-  tax: number;
-  net_profit: number;
-  created_at: string;
-  ipos?: { name: string } | null;
-};
-
 export function maskPan(pan: string) {
   if (pan.length < 10) return pan;
   return `${pan.slice(0, 3)}****${pan.slice(-1)}`;

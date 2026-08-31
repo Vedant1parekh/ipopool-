@@ -3,27 +3,25 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/require-user";
 
-export async function addProfitRecord(formData: FormData) {
-  const { supabase, user } = await requireUser();
+export async function setApplicationFinancials(
+  applicationId: string,
+  input: { amountDeducted: number; amountReceived: number; paymentStatus: string; remarks: string },
+) {
+  const { supabase } = await requireUser();
 
-  const ipoId = String(formData.get("ipoId") ?? "") || null;
-  const panCardId = String(formData.get("panCardId") ?? "") || null;
-  const amountDeducted = Number(formData.get("amountDeducted") ?? 0);
-  const amountReceived = Number(formData.get("amountReceived") ?? 0);
-  const tax = Number(formData.get("tax") ?? 0);
-
-  if (Number.isNaN(amountDeducted) || Number.isNaN(amountReceived) || Number.isNaN(tax)) {
+  if (Number.isNaN(input.amountDeducted) || Number.isNaN(input.amountReceived)) {
     return { error: "Amounts must be numbers." };
   }
 
-  const { error } = await supabase.from("profit_records").insert({
-    profile_id: user.id,
-    ipo_id: ipoId,
-    pan_card_id: panCardId,
-    amount_deducted: amountDeducted,
-    amount_received: amountReceived,
-    tax,
-  });
+  const { error } = await supabase
+    .from("pool_applications")
+    .update({
+      amount_deducted: input.amountDeducted,
+      amount_received: input.amountReceived,
+      payment_status: input.paymentStatus === "done" ? "done" : "pending",
+      remarks: input.remarks || null,
+    })
+    .eq("id", applicationId);
 
   if (error) {
     return { error: error.message };

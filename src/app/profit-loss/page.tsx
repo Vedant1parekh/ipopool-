@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/supabase/require-user";
-import type { Ipo, PanCard, ProfitRecord } from "@/lib/types";
-import { ProfitForm } from "./profit-form";
+import type { ApplicationMember } from "@/lib/types";
+import { PoolProfitRow } from "./pool-profit-row";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -13,45 +13,49 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type PoolApplicationFinancialRow = {
+  id: string;
+  amount_deducted: number | null;
+  amount_received: number | null;
+  net_profit: number | null;
+  payment_status: string;
+  remarks: string | null;
+  pools: { name: string; ipos: { name: string; listing_date: string | null } | null } | null;
+  pan_cards: { owner_id: string; profiles: { display_name: string } | null } | null;
+  pool_application_members: ApplicationMember[];
+};
+
 export default async function ProfitLossPage() {
   const { supabase, user } = await requireUser();
 
-  // profile_id = auth.uid() is enforced by RLS on profit_records, so this
-  // query can only ever return the logged-in user's own rows — no other
-  // pool member's data can leak in here even if the query were broadened.
-  const [{ data: records }, { data: ipos }, { data: panCards }] = await Promise.all([
-    supabase
-      .from("profit_records")
-      .select("id, profile_id, pan_card_id, ipo_id, amount_deducted, amount_received, gross_profit, tax, net_profit, created_at, ipos(name)")
-      .order("created_at", { ascending: false })
-      .returns<ProfitRecord[]>(),
-    supabase
-      .from("ipos")
-      .select("id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status")
-      .order("open_date", { ascending: false })
-      .returns<Ipo[]>(),
-    supabase
-      .from("pan_cards")
-      .select("id, owner_id, pan_number, label, created_at")
-      .eq("owner_id", user.id)
-      .returns<PanCard[]>(),
-  ]);
+  const { data: rows } = await supabase
+    .from("pool_applications")
+    .select(
+      "id, amount_deducted, amount_received, net_profit, payment_status, remarks, pools(name, ipos(name, listing_date)), pan_cards(owner_id, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
+    )
+    .eq("allotment_status", "alloted")
+    .order("created_at", { ascending: false })
+    .returns<PoolApplicationFinancialRow[]>();
 
-  const totalNet = records?.reduce((sum, r) => sum + Number(r.net_profit), 0) ?? 0;
+  const myRows = (rows ?? []).filter(
+    (r) => r.pan_cards?.owner_id === user.id || r.pool_application_members.some((m) => m.profile_id === user.id),
+  );
+
+  const totalNet = myRows.reduce((sum, r) => {
+    const memberCount = 1 + r.pool_application_members.length;
+    return sum + (r.net_profit !== null ? Number(r.net_profit) / memberCount : 0);
+  }, 0);
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-semibold">My Profit &amp; Loss</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        This is your own data only — other pool members&apos; entries never appear here.
+        One row per alloted application you&apos;re part of (as owner or clubbed member). Deducted/received amounts,
+        payment status, and remarks are shared and editable by anyone clubbed onto that application.
       </p>
 
-      <div className="mb-8">
-        <ProfitForm ipos={ipos ?? []} panCards={panCards ?? []} />
-      </div>
-
       <div className="mb-4 rounded-lg bg-muted p-4 text-sm">
-        Total net profit:{" "}
+        Your total net profit (after clubbing split):{" "}
         <span className={`font-semibold ${totalNet < 0 ? "text-destructive" : "text-success"}`}>
           ₹{totalNet.toFixed(2)}
         </span>
@@ -62,33 +66,54 @@ export default async function ProfitLossPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Applicant</TableHead>
                 <TableHead>IPO</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Members</TableHead>
                 <TableHead>Deducted</TableHead>
                 <TableHead>Received</TableHead>
                 <TableHead>Gross</TableHead>
                 <TableHead>Tax</TableHead>
                 <TableHead>Net</TableHead>
+                <TableHead>Split</TableHead>
+                <TableHead>Per person</TableHead>
+                <TableHead>Payment</TableHead>
+                <TableHead>Remarks</TableHead>
+                <TableHead>Save</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {records?.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{r.ipos?.name ?? "—"}</TableCell>
-                  <TableCell>₹{r.amount_deducted}</TableCell>
-                  <TableCell>₹{r.amount_received}</TableCell>
-                  <TableCell>₹{r.gross_profit}</TableCell>
-                  <TableCell>₹{r.tax}</TableCell>
-                  <TableCell
-                    className={`font-medium ${Number(r.net_profit) < 0 ? "text-destructive" : "text-success"}`}
-                  >
-                    ₹{r.net_profit}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(!records || records.length === 0) && (
+              {myRows.map((row) => {
+                const memberNames = [
+                  row.pan_cards?.profiles?.display_name ?? "Unknown",
+                  ...row.pool_application_members.map((m) => m.profiles?.display_name ?? "Member"),
+                ];
+                const memberCount = memberNames.length;
+
+                return (
+                  <TableRow key={row.id}>
+                    <TableCell>{row.pan_cards?.profiles?.display_name ?? "—"}</TableCell>
+                    <TableCell>{row.pools?.ipos?.name ?? "—"}</TableCell>
+                    <TableCell>{row.pools?.ipos?.listing_date ?? "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{memberNames.join(", ")}</TableCell>
+                    <PoolProfitRow
+                      applicationId={row.id}
+                      memberCount={memberCount}
+                      initial={{
+                        amountDeducted: row.amount_deducted,
+                        amountReceived: row.amount_received,
+                        paymentStatus: row.payment_status,
+                        remarks: row.remarks,
+                      }}
+                    />
+                  </TableRow>
+                );
+              })}
+              {myRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
-                    No entries yet — log one above.
+                  <TableCell colSpan={14} className="py-6 text-center text-muted-foreground">
+                    No alloted applications yet — this fills in once an application you&apos;re part of is marked
+                    Alloted on the Allotments page.
                   </TableCell>
                 </TableRow>
               )}
