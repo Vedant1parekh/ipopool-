@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
-import type { PanCard } from "@/lib/types";
-import { ApplicationForm } from "./application-form";
+import type { ApplicationMember, PanCard } from "@/lib/types";
+import { ApplicationForm, ClubButton } from "./application-form";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,15 @@ type PoolRow = {
 type ApplicationRow = {
   id: string;
   status: string;
-  pan_cards: { pan_number: string; label: string | null; owner_id: string } | null;
+  allotment_status: string;
+  pan_cards: {
+    id: string;
+    pan_number: string;
+    label: string | null;
+    owner_id: string;
+    profiles: { display_name: string } | null;
+  } | null;
+  pool_application_members: ApplicationMember[];
 };
 
 type MemberRow = {
@@ -49,7 +57,9 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
       .returns<MemberRow[]>(),
     supabase
       .from("pool_applications")
-      .select("id, status, pan_cards(pan_number, label, owner_id)")
+      .select(
+        "id, status, allotment_status, pan_cards(id, pan_number, label, owner_id, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
+      )
       .eq("pool_id", id)
       .order("created_at", { ascending: false })
       .returns<ApplicationRow[]>(),
@@ -75,6 +85,9 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     list.push(card);
     panCardsByMember.set(card.owner_id, list);
   }
+
+  const usedPanIds = new Set((applications ?? []).map((a) => a.pan_cards?.id).filter(Boolean));
+  const availablePanCards = (myPanCards ?? []).filter((p) => !usedPanIds.has(p.id));
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
@@ -119,24 +132,42 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="mb-8">
-        <ApplicationForm poolId={id} panCards={myPanCards ?? []} />
+        <ApplicationForm poolId={id} panCards={availablePanCards} />
       </section>
 
       <section>
         <h2 className="mb-2 font-medium">Applications in this pool</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          No spare PAN? Club onto someone else&apos;s application instead of applying separately.
+        </p>
         <div className="flex flex-col gap-2">
-          {applications?.map((app) => (
-            <div
-              key={app.id}
-              className="flex items-center justify-between rounded-lg border p-3 text-sm"
-            >
-              <span className="font-mono text-muted-foreground">
-                {app.pan_cards?.pan_number ?? "—"}
-                {app.pan_cards?.label && <span className="ml-2 font-sans">{app.pan_cards.label}</span>}
-              </span>
-              <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
-            </div>
-          ))}
+          {applications?.map((app) => {
+            const memberNames = [
+              app.pan_cards?.profiles?.display_name ?? "Unknown",
+              ...app.pool_application_members.map((m) => m.profiles?.display_name ?? "Member"),
+            ];
+            const isOwner = app.pan_cards?.owner_id === user.id;
+            const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
+            const canClub = !isOwner && !isCoMember && app.allotment_status === "pending";
+
+            return (
+              <div key={app.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-mono text-muted-foreground">
+                    {app.pan_cards?.pan_number ?? "—"}
+                    {app.pan_cards?.label && <span className="ml-2 font-sans">{app.pan_cards.label}</span>}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {memberNames.join(", ")} · {memberNames.length} member{memberNames.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
+                  {canClub && <ClubButton poolId={id} applicationId={app.id} />}
+                </div>
+              </div>
+            );
+          })}
           {(!applications || applications.length === 0) && (
             <p className="text-sm text-muted-foreground">No applications logged yet.</p>
           )}

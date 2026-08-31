@@ -1,13 +1,28 @@
 "use client";
 
 import { useActionState } from "react";
-import { addApplication } from "../actions";
+import { addApplication, clubOnApplication } from "../actions";
 import type { PanCard } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 const initialState = { error: null as string | null };
+
+export function ClubButton({ poolId, applicationId }: { poolId: string; applicationId: string }) {
+  const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, _formData: FormData) => {
+    return (await clubOnApplication(poolId, applicationId)) ?? initialState;
+  }, initialState);
+
+  return (
+    <form action={formAction} className="flex flex-col items-end gap-1">
+      <Button type="submit" size="sm" variant="secondary" disabled={pending}>
+        {pending ? "Joining..." : "Club in"}
+      </Button>
+      {state.error && <p className="text-xs text-destructive">{state.error}</p>}
+    </form>
+  );
+}
 const selectClass =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 

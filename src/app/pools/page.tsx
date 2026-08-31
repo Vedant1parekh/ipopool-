@@ -1,14 +1,12 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/require-user";
 import type { Ipo, Pool } from "@/lib/types";
-import { CreatePoolForm, JoinPoolForm } from "./pool-forms";
-import { quickJoinPool } from "./actions";
+import { CreatePoolForm, JoinPoolForm, QuickJoinButton } from "./pool-forms";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
-type PoolWithMemberCount = Pool & { pool_members: { count: number }[] };
+type PoolWithMembers = Pool & { pool_members: { profiles: { display_name: string } | null }[] };
 
 export default async function PoolsPage() {
   const { supabase, user } = await requireUser();
@@ -16,9 +14,9 @@ export default async function PoolsPage() {
   const [{ data: pools }, { count: panCount }, { data: ipos }, { data: myMemberships }] = await Promise.all([
     supabase
       .from("pools")
-      .select("id, name, owner_id, invite_code, ipo_id, category, created_at, pool_members(count)")
+      .select("id, name, owner_id, invite_code, ipo_id, category, created_at, pool_members(profiles(display_name))")
       .order("created_at", { ascending: false })
-      .returns<PoolWithMemberCount[]>(),
+      .returns<PoolWithMembers[]>(),
     supabase.from("pan_cards").select("id", { count: "exact", head: true }).eq("owner_id", user.id),
     supabase
       .from("ipos")
@@ -73,7 +71,7 @@ export default async function PoolsPage() {
         <h2 className="mb-2 font-medium">Discover other pools</h2>
         <div className="flex flex-col gap-2">
           {otherPools.map((pool) => (
-            <PoolRow key={pool.id} pool={pool} joinAction={quickJoinPool.bind(null, pool.invite_code)} />
+            <PoolRow key={pool.id} pool={pool} canJoin />
           ))}
           {otherPools.length === 0 && (
             <p className="text-sm text-muted-foreground">No other pools yet.</p>
@@ -84,25 +82,21 @@ export default async function PoolsPage() {
   );
 }
 
-function PoolRow({ pool, joinAction }: { pool: PoolWithMemberCount; joinAction?: () => Promise<void> }) {
-  const memberCount = pool.pool_members?.[0]?.count ?? 0;
+function PoolRow({ pool, canJoin }: { pool: PoolWithMembers; canJoin?: boolean }) {
+  const memberNames = (pool.pool_members ?? []).map((m) => m.profiles?.display_name ?? "Member");
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
       <Link href={`/pools/${pool.id}`} className="flex flex-1 flex-col hover:underline">
         <span className="font-medium">{pool.name}</span>
         <span className="text-xs text-muted-foreground">
-          {memberCount} member{memberCount === 1 ? "" : "s"}
+          {memberNames.length > 0 ? memberNames.join(", ") : "No members yet"}
         </span>
       </Link>
       <Badge variant="secondary" className="uppercase">
         {pool.category}
       </Badge>
-      {joinAction ? (
-        <form action={joinAction}>
-          <Button type="submit" size="sm">
-            Join
-          </Button>
-        </form>
+      {canJoin ? (
+        <QuickJoinButton inviteCode={pool.invite_code} />
       ) : (
         <span className="font-mono text-xs text-muted-foreground">{pool.invite_code}</span>
       )}

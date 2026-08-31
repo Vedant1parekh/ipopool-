@@ -34,6 +34,11 @@ export type Pool = {
   created_at: string;
 };
 
+export type ApplicationMember = {
+  profile_id: string;
+  profiles: { display_name: string } | null;
+};
+
 export type ProfitRecord = {
   id: string;
   profile_id: string;

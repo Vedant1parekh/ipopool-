@@ -85,12 +85,40 @@ export async function addApplication(poolId: string, formData: FormData) {
     return { error: "You can only log applications for your own PAN cards." };
   }
 
+  const { count: alreadyApplied } = await supabase
+    .from("pool_applications")
+    .select("id", { count: "exact", head: true })
+    .eq("pool_id", poolId)
+    .eq("pan_card_id", panCardId);
+
+  if (alreadyApplied) {
+    return { error: "This PAN has already applied in this pool — ask others to club onto it instead." };
+  }
+
   const { error } = await supabase.from("pool_applications").insert({
     pool_id: poolId,
     pan_card_id: panCardId,
     status,
     created_by: user.id,
   });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/pools/${poolId}`);
+  return { error: null };
+}
+
+// A pool member without a spare PAN can club onto someone else's already-
+// submitted application instead of being locked out. Blocked (via RLS) once
+// the PAN's own allotment result is in, or for the PAN's own owner.
+export async function clubOnApplication(poolId: string, applicationId: string) {
+  const { supabase, user } = await requireUser();
+
+  const { error } = await supabase
+    .from("pool_application_members")
+    .insert({ application_id: applicationId, profile_id: user.id });
 
   if (error) {
     return { error: error.message };

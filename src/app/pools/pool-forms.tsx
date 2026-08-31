@@ -1,15 +1,53 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useActionState } from "react";
-import { createPool, joinPool } from "./actions";
+import { createPool, joinPool, quickJoinPool } from "./actions";
 import type { Ipo, IpoType } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const initialState = { error: null as string | null };
+
+function HaveYouAppliedDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Have you applied yet?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Pools work best when every member has actually submitted an IPO application. Confirm you&apos;ve
+            filled at least one application before joining.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Not yet</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Yes, I&apos;ve applied</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 const selectClass =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
@@ -83,6 +121,8 @@ export function JoinPoolForm() {
   const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, formData: FormData) => {
     return (await joinPool(formData)) ?? initialState;
   }, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <Card>
@@ -90,14 +130,52 @@ export function JoinPoolForm() {
         <CardTitle className="text-base">Join a pool</CardTitle>
       </CardHeader>
       <CardContent>
-        <form action={formAction} className="flex flex-col gap-2">
+        <form ref={formRef} action={formAction} className="flex flex-col gap-2">
           <Input name="inviteCode" required placeholder="Invite code" />
-          <Button type="submit" disabled={pending} className="self-start">
+          <Button
+            type="button"
+            disabled={pending}
+            className="self-start"
+            onClick={() => {
+              if (formRef.current?.reportValidity()) setConfirmOpen(true);
+            }}
+          >
             {pending ? "Joining..." : "Join pool"}
           </Button>
           {state.error && <p className="text-sm text-destructive">{state.error}</p>}
         </form>
+        <HaveYouAppliedDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={() => {
+            setConfirmOpen(false);
+            formRef.current?.requestSubmit();
+          }}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+export function QuickJoinButton({ inviteCode }: { inviteCode: string }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <>
+      <form ref={formRef} action={quickJoinPool.bind(null, inviteCode)}>
+        <Button type="button" size="sm" onClick={() => setConfirmOpen(true)}>
+          Join
+        </Button>
+      </form>
+      <HaveYouAppliedDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          formRef.current?.requestSubmit();
+        }}
+      />
+    </>
   );
 }
