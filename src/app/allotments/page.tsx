@@ -16,9 +16,8 @@ export const dynamic = "force-dynamic";
 
 type ApplicationRow = {
   id: string;
-  category: string;
   allotment_status: AllotmentStatus;
-  pools: { name: string } | null;
+  pools: { name: string; category: string; ipo_id: string } | null;
   pan_cards: {
     pan_number: string;
     label: string | null;
@@ -37,7 +36,7 @@ export default async function AllotmentsPage({
   const { data: ipos } = await supabase
     .from("ipos")
     .select("id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status")
-    .in("status", ["closed", "listed"])
+    .eq("status", "closed")
     .order("listing_date", { ascending: false })
     .returns<Ipo[]>();
 
@@ -46,9 +45,9 @@ export default async function AllotmentsPage({
     const { data } = await supabase
       .from("pool_applications")
       .select(
-        "id, category, allotment_status, pools(name), pan_cards(pan_number, label, profiles(display_name))",
+        "id, allotment_status, pools!inner(name, category, ipo_id), pan_cards(pan_number, label, profiles(display_name))",
       )
-      .eq("ipo_id", selectedIpoId)
+      .eq("pools.ipo_id", selectedIpoId)
       .order("created_at", { ascending: true })
       .returns<ApplicationRow[]>();
     applications = data;
@@ -121,7 +120,7 @@ export default async function AllotmentsPage({
                       {app.pan_cards?.label ?? maskPan(app.pan_cards?.pan_number ?? "")}
                     </TableCell>
                     <TableCell>{app.pools?.name ?? "—"}</TableCell>
-                    <TableCell className="uppercase text-muted-foreground">{app.category}</TableCell>
+                    <TableCell className="uppercase text-muted-foreground">{app.pools?.category}</TableCell>
                     <TableCell>
                       <AllotmentBadge status={app.allotment_status} />
                     </TableCell>

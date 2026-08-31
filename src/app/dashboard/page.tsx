@@ -20,7 +20,7 @@ export default async function DashboardPage({
     .from("ipos")
     .select("id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status")
     .eq("type", activeType)
-    .order("open_date", { ascending: false })
+    .order("open_date", { ascending: true })
     .returns<Ipo[]>();
 
   return (

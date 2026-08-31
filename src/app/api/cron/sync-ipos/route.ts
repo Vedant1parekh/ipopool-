@@ -3,21 +3,23 @@ import type { IpoStatus, IpoType } from "@/lib/types";
 
 // Scheduled by Vercel Cron (see vercel.json) to keep the `ipos` table fresh.
 // Uses the service role key because it must bypass RLS to write to `ipos`.
+// Provider: ipoalerts.in — self-serve API key from https://ipoalerts.in/signup,
+// dashboard → API Keys. Free tier: 6 req/min, 25/day, 750/month, and reportedly
+// only 1 IPO per request — if that turns out to mean the *list* endpoint only
+// ever returns a single record on the free tier, this sync will need a paid
+// plan to be useful; worth confirming against a real key.
 
-type IpoGuruRecord = {
+const STATUSES = ["open", "upcoming", "closed", "listed"] as const;
+
+type IpoAlertsRecord = {
   name: string;
-  type: string; // "SME" | "Mainboard" (casing not guaranteed by the provider)
-  status: string; // "Open" | "Upcoming" | "Closed" | "Listed"
-  open_date: string | null;
-  close_date: string | null;
-  listing_date: string | null;
-  price_band: string | null; // e.g. "163-172"
-  lot_size: string | null;
-};
-
-type IpoGuruResponse = {
-  success: boolean;
-  data: IpoGuruRecord[];
+  type: string; // "EQ" (mainboard) | "SME" | "DEBT"
+  status: string; // open | closed | upcoming | listed | announced
+  startDate: string | null;
+  endDate: string | null;
+  listingDate: string | null;
+  priceRange: string | null; // e.g. "95-100"
+  minQty: number | string | null;
 };
 
 type MappedIpo = {
@@ -33,42 +35,56 @@ type MappedIpo = {
   source: string;
 };
 
-function parsePriceBand(band: string | null): [number | null, number | null] {
-  if (!band) return [null, null];
-  const parts = band.split("-").map((p) => Number(p.trim()));
+function parsePriceRange(range: string | null): [number | null, number | null] {
+  if (!range) return [null, null];
+  const parts = range.split("-").map((p) => Number(p.trim()));
   if (parts.length === 2 && parts.every((n) => !Number.isNaN(n))) {
     return [parts[0], parts[1]];
   }
-  const single = Number(band.trim());
+  const single = Number(range.trim());
   return Number.isNaN(single) ? [null, null] : [single, single];
 }
 
-function normalizeType(type: string): IpoType {
-  return type.toLowerCase().includes("sme") ? "sme" : "mainboard";
+function normalizeType(type: string): IpoType | null {
+  const t = type.toLowerCase();
+  if (t === "sme") return "sme";
+  if (t === "eq") return "mainboard";
+  return null; // e.g. "DEBT" — not something we track
 }
 
 function normalizeStatus(status: string): IpoStatus {
   const s = status.toLowerCase();
-  if (s.includes("open")) return "open";
-  if (s.includes("closed")) return "closed";
-  if (s.includes("listed")) return "listed";
-  return "upcoming";
+  if (s === "open" || s === "closed" || s === "listed") return s;
+  return "upcoming"; // covers "upcoming" and "announced"
 }
 
-function mapRecord(record: IpoGuruRecord): MappedIpo {
-  const [price_band_min, price_band_max] = parsePriceBand(record.price_band);
+function mapRecord(record: IpoAlertsRecord): MappedIpo | null {
+  const type = normalizeType(record.type);
+  if (!type) return null;
+
+  const [price_band_min, price_band_max] = parsePriceRange(record.priceRange);
   return {
     name: record.name,
-    type: normalizeType(record.type),
-    open_date: record.open_date,
-    close_date: record.close_date,
-    listing_date: record.listing_date,
+    type,
+    open_date: record.startDate,
+    close_date: record.endDate,
+    listing_date: record.listingDate,
     price_band_min,
     price_band_max,
-    lot_size: record.lot_size ? Number(record.lot_size) : null,
+    lot_size: record.minQty ? Number(record.minQty) : null,
     status: normalizeStatus(record.status),
-    source: "ipoguru",
+    source: "ipoalerts",
   };
+}
+
+function extractRecords(payload: unknown): IpoAlertsRecord[] {
+  if (Array.isArray(payload)) return payload as IpoAlertsRecord[];
+  if (payload && typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return obj.data as IpoAlertsRecord[];
+    if (Array.isArray(obj.ipos)) return obj.ipos as IpoAlertsRecord[];
+  }
+  return [];
 }
 
 export async function GET(request: Request) {
@@ -81,24 +97,28 @@ export async function GET(request: Request) {
     return Response.json({ error: "IPO_DATA_API_KEY is not set." }, { status: 500 });
   }
 
-  const providerResponse = await fetch("https://www.ipoguru.in/api/v1/ipos", {
-    headers: { "X-API-KEY": process.env.IPO_DATA_API_KEY },
-  });
+  const byKey = new Map<string, MappedIpo>();
 
-  if (!providerResponse.ok) {
-    return Response.json(
-      { error: `IPO Guru request failed: ${providerResponse.status}` },
-      { status: 502 },
-    );
+  for (const status of STATUSES) {
+    const providerResponse = await fetch(`https://api.ipoalerts.in/ipos?status=${status}&limit=100`, {
+      headers: { "x-api-key": process.env.IPO_DATA_API_KEY },
+    });
+
+    if (!providerResponse.ok) {
+      return Response.json(
+        { error: `ipoalerts.in request failed for status=${status}: ${providerResponse.status}` },
+        { status: 502 },
+      );
+    }
+
+    const records = extractRecords(await providerResponse.json());
+    for (const record of records) {
+      const mapped = mapRecord(record);
+      if (mapped) byKey.set(`${mapped.name}|${mapped.type}`, mapped);
+    }
   }
 
-  const payload = (await providerResponse.json()) as IpoGuruResponse;
-
-  if (!payload.success) {
-    return Response.json({ error: "IPO Guru returned success: false" }, { status: 502 });
-  }
-
-  const mapped = payload.data.map(mapRecord);
+  const mapped = Array.from(byKey.values());
 
   if (mapped.length === 0) {
     return Response.json({ synced: 0 });

@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { addApplication } from "../actions";
-import type { Ipo, PanCard } from "@/lib/types";
+import type { PanCard } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,7 @@ const initialState = { error: null as string | null };
 const selectClass =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-export function ApplicationForm({
-  poolId,
-  ipos,
-  panCards,
-}: {
-  poolId: string;
-  ipos: Ipo[];
-  panCards: PanCard[];
-}) {
+export function ApplicationForm({ poolId, panCards }: { poolId: string; panCards: PanCard[] }) {
   const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, formData: FormData) => {
     return (await addApplication(poolId, formData)) ?? initialState;
   }, initialState);
@@ -33,18 +25,6 @@ export function ApplicationForm({
         <form action={formAction} className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ipoId">IPO</Label>
-              <select id="ipoId" name="ipoId" required className={selectClass}>
-                <option value="">Select an IPO</option>
-                {ipos.map((ipo) => (
-                  <option key={ipo.id} value={ipo.id}>
-                    {ipo.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
               <Label htmlFor="panCardId">Your PAN card</Label>
               <select id="panCardId" name="panCardId" required className={selectClass}>
                 <option value="">Select a PAN</option>
@@ -53,15 +33,6 @@ export function ApplicationForm({
                     {pan.label ? `${pan.label} (${pan.pan_number})` : pan.pan_number}
                   </option>
                 ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="category">Category</Label>
-              <select id="category" name="category" className={selectClass}>
-                <option value="retail">Retail</option>
-                <option value="shni">SHNI</option>
-                <option value="bhni">BHNI</option>
               </select>
             </div>
 

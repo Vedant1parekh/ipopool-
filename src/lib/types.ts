@@ -29,6 +29,8 @@ export type Pool = {
   name: string;
   owner_id: string;
   invite_code: string;
+  ipo_id: string;
+  category: ApplicationCategory;
   created_at: string;
 };
 

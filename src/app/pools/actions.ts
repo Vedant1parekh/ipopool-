@@ -4,6 +4,9 @@ import { randomBytes } from "crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/require-user";
+import type { ApplicationCategory } from "@/lib/types";
+
+const CATEGORIES: ApplicationCategory[] = ["retail", "shni", "bhni"];
 
 async function userHasPanCard(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], userId: string) {
   const { count } = await supabase
@@ -15,21 +18,35 @@ async function userHasPanCard(supabase: Awaited<ReturnType<typeof requireUser>>[
 
 export async function createPool(formData: FormData) {
   const { supabase, user } = await requireUser();
-  const name = String(formData.get("name") ?? "").trim();
+  const ipoId = String(formData.get("ipoId") ?? "");
+  const category = String(formData.get("category") ?? "");
 
-  if (!name) {
-    return { error: "Pool name is required." };
+  if (!ipoId || !CATEGORIES.includes(category as ApplicationCategory)) {
+    return { error: "Choose an IPO and a category." };
   }
 
   if (!(await userHasPanCard(supabase, user.id))) {
     return { error: "Add at least one PAN card before creating a pool." };
   }
 
+  const { data: ipo, error: ipoError } = await supabase
+    .from("ipos")
+    .select("name")
+    .eq("id", ipoId)
+    .single();
+
+  if (ipoError || !ipo) {
+    return { error: "Selected IPO could not be found." };
+  }
+
+  const displayName =
+    (user.user_metadata?.display_name as string | undefined) ?? user.email?.split("@")[0] ?? "user";
+  const name = `${ipo.name}_${category}_${displayName}`;
   const inviteCode = randomBytes(4).toString("hex");
 
   const { data: pool, error } = await supabase
     .from("pools")
-    .insert({ name, owner_id: user.id, invite_code: inviteCode })
+    .insert({ name, owner_id: user.id, invite_code: inviteCode, ipo_id: ipoId, category })
     .select("id")
     .single();
 
@@ -51,13 +68,11 @@ export async function createPool(formData: FormData) {
 export async function addApplication(poolId: string, formData: FormData) {
   const { supabase, user } = await requireUser();
 
-  const ipoId = String(formData.get("ipoId") ?? "");
   const panCardId = String(formData.get("panCardId") ?? "");
-  const category = String(formData.get("category") ?? "retail");
   const status = String(formData.get("status") ?? "applied");
 
-  if (!ipoId || !panCardId) {
-    return { error: "Choose an IPO and a PAN card." };
+  if (!panCardId) {
+    return { error: "Choose a PAN card." };
   }
 
   const { count: ownsThisPan } = await supabase
@@ -72,9 +87,7 @@ export async function addApplication(poolId: string, formData: FormData) {
 
   const { error } = await supabase.from("pool_applications").insert({
     pool_id: poolId,
-    ipo_id: ipoId,
     pan_card_id: panCardId,
-    category,
     status,
     created_by: user.id,
   });
@@ -101,6 +114,24 @@ export async function joinPool(formData: FormData) {
 
   if (error || !poolId) {
     return { error: error?.message ?? "Could not join pool." };
+  }
+
+  redirect(`/pools/${poolId}`);
+}
+
+// Used by the one-click "Join" button on the public pools list — no inline
+// error UI there, so failures throw and surface via the default error
+// boundary instead of returning a value (this is called directly as a
+// plain <form action>, which requires a void-returning function).
+export async function quickJoinPool(inviteCode: string) {
+  const { supabase } = await requireUser();
+
+  const { data: poolId, error } = await supabase.rpc("join_pool_by_invite_code", {
+    code: inviteCode.trim().toLowerCase(),
+  });
+
+  if (error || !poolId) {
+    throw new Error(error?.message ?? "Could not join pool.");
   }
 
   redirect(`/pools/${poolId}`);
