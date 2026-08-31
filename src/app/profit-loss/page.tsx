@@ -23,6 +23,7 @@ type PoolApplicationFinancialRow = {
   pools: { name: string; ipos: { name: string; listing_date: string | null } | null } | null;
   pan_cards: { owner_id: string; profiles: { display_name: string } | null } | null;
   pool_application_members: ApplicationMember[];
+  last_modified_by: string | null;
 };
 
 export default async function ProfitLossPage() {
@@ -31,7 +32,7 @@ export default async function ProfitLossPage() {
   const { data: rows } = await supabase
     .from("pool_applications")
     .select(
-      "id, amount_deducted, amount_received, net_profit, payment_status, remarks, pools(name, ipos(name, listing_date)), pan_cards(owner_id, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
+      "id, amount_deducted, amount_received, net_profit, payment_status, remarks, last_modified_by, pools(name, ipos(name, listing_date)), pan_cards(owner_id, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
     )
     .eq("allotment_status", "alloted")
     .order("created_at", { ascending: false })
@@ -80,6 +81,7 @@ export default async function ProfitLossPage() {
                 <TableHead>Payment</TableHead>
                 <TableHead>Remarks</TableHead>
                 <TableHead>Save</TableHead>
+                <TableHead>Last modified by</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -106,12 +108,13 @@ export default async function ProfitLossPage() {
                         remarks: row.remarks,
                       }}
                     />
+                    <TableCell className="text-xs text-muted-foreground">{row.last_modified_by ?? "—"}</TableCell>
                   </TableRow>
                 );
               })}
               {myRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={14} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={15} className="py-6 text-center text-muted-foreground">
                     No alloted applications yet — this fills in once an application you&apos;re part of is marked
                     Alloted on the Allotments page.
                   </TableCell>

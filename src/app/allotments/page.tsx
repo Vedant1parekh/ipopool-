@@ -24,6 +24,7 @@ type ApplicationRow = {
     profiles: { display_name: string } | null;
   } | null;
   pool_application_members: ApplicationMember[];
+  last_modified_by: string | null;
 };
 
 export default async function AllotmentsPage({
@@ -46,7 +47,7 @@ export default async function AllotmentsPage({
     const { data } = await supabase
       .from("pool_applications")
       .select(
-        "id, allotment_status, pools!inner(name, category, ipo_id), pan_cards(pan_number, label, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
+        "id, allotment_status, last_modified_by, pools!inner(name, category, ipo_id), pan_cards(pan_number, label, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
       )
       .eq("pools.ipo_id", selectedIpoId)
       .order("created_at", { ascending: true })
@@ -112,6 +113,7 @@ export default async function AllotmentsPage({
                   <TableHead>Members</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Allotment checklist</TableHead>
+                  <TableHead>Last modified by</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -136,12 +138,13 @@ export default async function AllotmentsPage({
                       <TableCell>
                         <AllotmentChecklistItem applicationId={app.id} initialStatus={app.allotment_status} />
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{app.last_modified_by ?? "—"}</TableCell>
                     </TableRow>
                   );
                 })}
                 {(!applications || applications.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
                       No applications logged for this IPO in any pool you&apos;re part of.
                     </TableCell>
                   </TableRow>
