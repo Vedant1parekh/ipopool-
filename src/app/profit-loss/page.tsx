@@ -71,6 +71,7 @@ export default async function ProfitLossPage() {
                 <TableHead>IPO</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Members</TableHead>
+                <TableHead>Payout reminder</TableHead>
                 <TableHead>Deducted</TableHead>
                 <TableHead>Received</TableHead>
                 <TableHead>Gross</TableHead>
@@ -86,11 +87,10 @@ export default async function ProfitLossPage() {
             </TableHeader>
             <TableBody>
               {myRows.map((row) => {
-                const memberNames = [
-                  row.pan_cards?.profiles?.display_name ?? "Unknown",
-                  ...row.pool_application_members.map((m) => m.profiles?.display_name ?? "Member"),
-                ];
+                const coMemberNames = row.pool_application_members.map((m) => m.profiles?.display_name ?? "Member");
+                const memberNames = [row.pan_cards?.profiles?.display_name ?? "Unknown", ...coMemberNames];
                 const memberCount = memberNames.length;
+                const isApplicant = row.pan_cards?.owner_id === user.id;
 
                 return (
                   <TableRow key={row.id}>
@@ -98,6 +98,19 @@ export default async function ProfitLossPage() {
                     <TableCell>{row.pools?.ipos?.name ?? "—"}</TableCell>
                     <TableCell>{row.pools?.ipos?.listing_date ?? "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{memberNames.join(", ")}</TableCell>
+                    <TableCell className="text-xs">
+                      {coMemberNames.length === 0 ? (
+                        <span className="text-muted-foreground">No clubbing — nothing to pay out</span>
+                      ) : isApplicant ? (
+                        <span className="font-medium text-warning-foreground">
+                          You need to pay: {coMemberNames.join(", ")}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {row.pan_cards?.profiles?.display_name ?? "Applicant"} owes you a share
+                        </span>
+                      )}
+                    </TableCell>
                     <PoolProfitRow
                       applicationId={row.id}
                       memberCount={memberCount}
@@ -114,7 +127,7 @@ export default async function ProfitLossPage() {
               })}
               {myRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={15} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={16} className="py-6 text-center text-muted-foreground">
                     No alloted applications yet — this fills in once an application you&apos;re part of is marked
                     Alloted on the Allotments page.
                   </TableCell>
