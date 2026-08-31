@@ -128,6 +128,24 @@ export async function clubOnApplication(poolId: string, applicationId: string) {
   return { error: null };
 }
 
+// Undo clubbing — always allowed, even after the allotment result is in.
+export async function unclubFromApplication(poolId: string, applicationId: string) {
+  const { supabase, user } = await requireUser();
+
+  const { error } = await supabase
+    .from("pool_application_members")
+    .delete()
+    .eq("application_id", applicationId)
+    .eq("profile_id", user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/pools/${poolId}`);
+  return { error: null };
+}
+
 export async function joinPool(formData: FormData) {
   const { supabase } = await requireUser();
   const inviteCode = String(formData.get("inviteCode") ?? "").trim().toLowerCase();

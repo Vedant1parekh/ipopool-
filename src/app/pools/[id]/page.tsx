@@ -148,7 +148,8 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
             ];
             const isOwner = app.pan_cards?.owner_id === user.id;
             const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
-            const canClub = !isOwner && !isCoMember && app.allotment_status === "pending";
+            const canJoin = !isOwner && !isCoMember && app.allotment_status === "pending";
+            const canLeave = !isOwner && isCoMember;
 
             return (
               <div key={app.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
@@ -163,7 +164,9 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
-                  {canClub && <ClubButton poolId={id} applicationId={app.id} />}
+                  {(canJoin || canLeave) && (
+                    <ClubButton poolId={id} applicationId={app.id} isMember={isCoMember} />
+                  )}
                 </div>
               </div>
             );

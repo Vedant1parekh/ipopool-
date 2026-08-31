@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { addApplication, clubOnApplication } from "../actions";
+import { addApplication, clubOnApplication, unclubFromApplication } from "../actions";
 import type { PanCard } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -9,15 +9,24 @@ import { Button } from "@/components/ui/button";
 
 const initialState = { error: null as string | null };
 
-export function ClubButton({ poolId, applicationId }: { poolId: string; applicationId: string }) {
+export function ClubButton({
+  poolId,
+  applicationId,
+  isMember,
+}: {
+  poolId: string;
+  applicationId: string;
+  isMember: boolean;
+}) {
   const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, _formData: FormData) => {
-    return (await clubOnApplication(poolId, applicationId)) ?? initialState;
+    const action = isMember ? unclubFromApplication : clubOnApplication;
+    return (await action(poolId, applicationId)) ?? initialState;
   }, initialState);
 
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
-      <Button type="submit" size="sm" variant="secondary" disabled={pending}>
-        {pending ? "Joining..." : "Club in"}
+      <Button type="submit" size="sm" variant={isMember ? "outline" : "secondary"} disabled={pending}>
+        {pending ? "Saving..." : isMember ? "Remove club in" : "Club in"}
       </Button>
       {state.error && <p className="text-xs text-destructive">{state.error}</p>}
     </form>

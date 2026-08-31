@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/supabase/require-user";
-import { maskPan, type AllotmentStatus, type Ipo } from "@/lib/types";
+import { maskPan, type AllotmentStatus, type ApplicationMember, type Ipo } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { AllotmentActionButtons } from "./allotment-row";
+import { AllotmentChecklistItem } from "./allotment-row";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,7 @@ type ApplicationRow = {
     label: string | null;
     profiles: { display_name: string } | null;
   } | null;
+  pool_application_members: ApplicationMember[];
 };
 
 export default async function AllotmentsPage({
@@ -45,7 +46,7 @@ export default async function AllotmentsPage({
     const { data } = await supabase
       .from("pool_applications")
       .select(
-        "id, allotment_status, pools!inner(name, category, ipo_id), pan_cards(pan_number, label, profiles(display_name))",
+        "id, allotment_status, pools!inner(name, category, ipo_id), pan_cards(pan_number, label, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
       )
       .eq("pools.ipo_id", selectedIpoId)
       .order("created_at", { ascending: true })
@@ -108,30 +109,39 @@ export default async function AllotmentsPage({
                   <TableHead>PAN</TableHead>
                   <TableHead>Pool</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Members</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Update</TableHead>
+                  <TableHead>Allotment checklist</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {applications?.map((app) => (
-                  <TableRow key={app.id}>
-                    <TableCell>{app.pan_cards?.profiles?.display_name ?? "—"}</TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {app.pan_cards?.label ?? maskPan(app.pan_cards?.pan_number ?? "")}
-                    </TableCell>
-                    <TableCell>{app.pools?.name ?? "—"}</TableCell>
-                    <TableCell className="uppercase text-muted-foreground">{app.pools?.category}</TableCell>
-                    <TableCell>
-                      <AllotmentBadge status={app.allotment_status} />
-                    </TableCell>
-                    <TableCell>
-                      <AllotmentActionButtons applicationId={app.id} />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {applications?.map((app) => {
+                  const memberNames = [
+                    app.pan_cards?.profiles?.display_name ?? "Unknown",
+                    ...app.pool_application_members.map((m) => m.profiles?.display_name ?? "Member"),
+                  ];
+
+                  return (
+                    <TableRow key={app.id}>
+                      <TableCell>{app.pan_cards?.profiles?.display_name ?? "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {app.pan_cards?.label ?? maskPan(app.pan_cards?.pan_number ?? "")}
+                      </TableCell>
+                      <TableCell>{app.pools?.name ?? "—"}</TableCell>
+                      <TableCell className="uppercase text-muted-foreground">{app.pools?.category}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{memberNames.join(", ")}</TableCell>
+                      <TableCell>
+                        <AllotmentBadge status={app.allotment_status} />
+                      </TableCell>
+                      <TableCell>
+                        <AllotmentChecklistItem applicationId={app.id} initialStatus={app.allotment_status} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 {(!applications || applications.length === 0) && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
                       No applications logged for this IPO in any pool you&apos;re part of.
                     </TableCell>
                   </TableRow>
