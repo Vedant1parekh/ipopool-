@@ -16,6 +16,22 @@ export type Ipo = {
   status: IpoStatus;
 };
 
+export type IpoDetails = Ipo & {
+  symbol: string | null;
+  slug: string | null;
+  logo_url: string | null;
+  about: string | null;
+  strengths: string[] | null;
+  risks: string[] | null;
+  schedule: { event: string; date: string }[] | null;
+  issue_size: string | null;
+  min_amount: number | null;
+  prospectus_url: string | null;
+  nse_info_url: string | null;
+  bse_info_url: string | null;
+  type_of_issue: string | null;
+};
+
 export type PanCard = {
   id: string;
   owner_id: string;

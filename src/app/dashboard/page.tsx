@@ -1,11 +1,25 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/require-user";
-import type { Ipo, IpoType } from "@/lib/types";
+import type { IpoStatus, IpoType } from "@/lib/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
+
+type DashboardIpo = {
+  id: string;
+  name: string;
+  type: IpoType;
+  open_date: string | null;
+  close_date: string | null;
+  listing_date: string | null;
+  price_band_min: number | null;
+  price_band_max: number | null;
+  lot_size: number | null;
+  status: IpoStatus;
+  logo_url: string | null;
+};
 
 export default async function DashboardPage({
   searchParams,
@@ -18,15 +32,22 @@ export default async function DashboardPage({
 
   const { data: ipos, error } = await supabase
     .from("ipos")
-    .select("id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status")
+    .select(
+      "id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status, logo_url",
+    )
     .eq("type", activeType)
     .order("open_date", { ascending: true })
-    .returns<Ipo[]>();
+    .returns<DashboardIpo[]>();
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">IPO Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">IPO Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
+        </div>
         <Button size="sm" render={<Link href="/pools">Join / manage pools</Link>} />
       </div>
 
@@ -43,26 +64,38 @@ export default async function DashboardPage({
 
       <div className="flex flex-col gap-3">
         {ipos?.map((ipo) => (
-          <Card key={ipo.id} className="p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-medium">{ipo.name}</h2>
-              <StatusBadge status={ipo.status} />
-            </div>
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground sm:grid-cols-4">
-              <Info label="Open" value={ipo.open_date} />
-              <Info label="Close" value={ipo.close_date} />
-              <Info label="Listing" value={ipo.listing_date} />
-              <Info
-                label="Price band"
-                value={
-                  ipo.price_band_min && ipo.price_band_max
-                    ? `₹${ipo.price_band_min}–${ipo.price_band_max}`
-                    : null
-                }
-              />
-              <Info label="Lot size" value={ipo.lot_size} />
-            </dl>
-          </Card>
+          <Link key={ipo.id} href={`/dashboard/${ipo.id}`}>
+            <Card className="p-4 transition-colors hover:bg-muted/50">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  {ipo.logo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={ipo.logo_url}
+                      alt=""
+                      className="size-8 shrink-0 rounded-md border object-contain"
+                    />
+                  )}
+                  <h2 className="truncate font-medium">{ipo.name}</h2>
+                </div>
+                <StatusBadge status={ipo.status} />
+              </div>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground sm:grid-cols-4">
+                <Info label="Open" value={ipo.open_date} />
+                <Info label="Close" value={ipo.close_date} />
+                <Info label="Listing" value={ipo.listing_date} />
+                <Info
+                  label="Price band"
+                  value={
+                    ipo.price_band_min && ipo.price_band_max
+                      ? `₹${ipo.price_band_min}–${ipo.price_band_max}`
+                      : null
+                  }
+                />
+                <Info label="Lot size" value={ipo.lot_size} />
+              </dl>
+            </Card>
+          </Link>
         ))}
       </div>
     </main>
@@ -82,8 +115,8 @@ function TabLink({ label, type, active }: { label: string; type: string; active:
   );
 }
 
-function StatusBadge({ status }: { status: Ipo["status"] }) {
-  const variants: Record<Ipo["status"], string> = {
+function StatusBadge({ status }: { status: IpoStatus }) {
+  const variants: Record<IpoStatus, string> = {
     open: "bg-primary text-primary-foreground",
     upcoming: "bg-secondary text-secondary-foreground",
     closed: "bg-warning text-warning-foreground",
