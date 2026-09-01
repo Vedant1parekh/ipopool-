@@ -7,11 +7,17 @@ import type { IpoStatus, IpoType } from "@/lib/types";
 // `status` is required and only "open"/"upcoming" are allowed on this plan
 // ("closed"/"listed" error with "This parameter is not supported for free
 // plan users"); `limit` isn't a valid param either — the API always
-// returns exactly 1 IPO per page. So this only syncs status=open,
-// paginating page-by-page using the response's meta.totalPages, capped at
-// MAX_PAGES to stay within the daily quota.
+// returns exactly 1 IPO per page; and firing more than 6 requests within a
+// minute gets a 429 (confirmed: pages 1-6 succeeded, page 7 failed).
+//
+// Sleeping between requests to stay under 6/min would make this run for
+// minutes, risking a serverless function timeout — so instead each
+// invocation fetches only one batch of BATCH_SIZE pages and saves a resume
+// cursor (`next_page`/`total_pages` on ipo_sync_state); the next login or
+// cron run picks up where it left off, until the day's full page count is
+// covered.
 
-const MAX_PAGES = 25;
+const BATCH_SIZE = 6;
 
 type IpoAlertsRecord = {
   name: string;
@@ -125,11 +131,21 @@ function mapRecord(record: IpoAlertsRecord): MappedIpo | null {
 
 export type SyncResult =
   | { skipped: true }
-  | { skipped: false; synced: number; pagesFetched: number; totalPages: number }
+  | {
+      skipped: false;
+      synced: number;
+      pagesFetched: number;
+      totalPages: number | null;
+      done: boolean;
+      hitRateLimit: boolean;
+    }
   | { skipped: false; error: string };
 
-// Idempotent for a given day: claims `ipo_sync_state` atomically first, so
-// if today's sync already ran (or is running elsewhere), this is a no-op.
+// Resumable across invocations: reads the saved cursor from
+// ipo_sync_state, fetches at most one batch, then saves the new cursor.
+// Not race-proof against two logins landing in the exact same instant
+// (both could fetch the same batch), but the upsert is idempotent so the
+// only cost is a wasted request — acceptable at this scale.
 export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
   if (!process.env.IPO_DATA_API_KEY) {
     return { skipped: false, error: "IPO_DATA_API_KEY is not set." };
@@ -142,32 +158,40 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: claimed, error: claimError } = await supabase
+  const { data: state, error: stateError } = await supabase
     .from("ipo_sync_state")
-    .update({ last_synced_date: today })
+    .select("last_synced_date, next_page, total_pages")
     .eq("id", 1)
-    .lt("last_synced_date", today)
-    .select("id");
+    .single();
 
-  if (claimError) {
-    return { skipped: false, error: claimError.message };
+  if (stateError || !state) {
+    return { skipped: false, error: stateError?.message ?? "ipo_sync_state row is missing." };
   }
 
-  if (!claimed || claimed.length === 0) {
-    return { skipped: true };
+  const isNewDay = state.last_synced_date < today;
+  let nextPage = isNewDay ? 1 : state.next_page;
+  let totalPages: number | null = isNewDay ? null : state.total_pages;
+
+  if (!isNewDay && totalPages !== null && nextPage > totalPages) {
+    return { skipped: true }; // already fully synced today
   }
 
   const byKey = new Map<string, MappedIpo>();
-  let page = 1;
-  let totalPages = 1;
+  let pagesFetched = 0;
+  let hitRateLimit = false;
 
-  while (page <= totalPages && page <= MAX_PAGES) {
-    const providerResponse = await fetch(`https://api.ipoalerts.in/ipos?status=open&page=${page}`, {
+  while (pagesFetched < BATCH_SIZE && (totalPages === null || nextPage <= totalPages)) {
+    const providerResponse = await fetch(`https://api.ipoalerts.in/ipos?status=open&page=${nextPage}`, {
       headers: { "x-api-key": process.env.IPO_DATA_API_KEY },
     });
 
+    if (providerResponse.status === 429) {
+      hitRateLimit = true;
+      break;
+    }
+
     if (!providerResponse.ok) {
-      return { skipped: false, error: `ipoalerts.in request failed on page ${page}: ${providerResponse.status}` };
+      return { skipped: false, error: `ipoalerts.in request failed on page ${nextPage}: ${providerResponse.status}` };
     }
 
     const payload = (await providerResponse.json()) as IpoAlertsResponse;
@@ -178,25 +202,39 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
       if (mapped) byKey.set(`${mapped.name}|${mapped.type}`, mapped);
     }
 
-    page += 1;
+    nextPage += 1;
+    pagesFetched += 1;
   }
 
   const mapped = Array.from(byKey.values());
+  let synced = 0;
 
-  if (mapped.length === 0) {
-    return { skipped: false, synced: 0, pagesFetched: page - 1, totalPages };
+  if (mapped.length > 0) {
+    const { error, count } = await supabase
+      .from("ipos")
+      .upsert(
+        mapped.map((ipo) => ({ ...ipo, last_synced_at: new Date().toISOString() })),
+        { onConflict: "name,type", count: "exact" },
+      );
+
+    if (error) {
+      return { skipped: false, error: error.message };
+    }
+
+    synced = count ?? mapped.length;
   }
 
-  const { error, count } = await supabase
-    .from("ipos")
-    .upsert(
-      mapped.map((ipo) => ({ ...ipo, last_synced_at: new Date().toISOString() })),
-      { onConflict: "name,type", count: "exact" },
-    );
+  // ipoalerts.in never gives us status=closed on this plan, so derive it
+  // ourselves: any IPO still marked "open" whose close date has already
+  // passed (i.e. today is after it) is actually closed by now.
+  await supabase.from("ipos").update({ status: "closed" }).eq("status", "open").lt("close_date", today);
 
-  if (error) {
-    return { skipped: false, error: error.message };
-  }
+  const done = totalPages !== null && nextPage > totalPages;
 
-  return { skipped: false, synced: count ?? mapped.length, pagesFetched: page - 1, totalPages };
+  await supabase
+    .from("ipo_sync_state")
+    .update({ last_synced_date: today, next_page: nextPage, total_pages: totalPages })
+    .eq("id", 1);
+
+  return { skipped: false, synced, pagesFetched, totalPages, done, hitRateLimit };
 }
