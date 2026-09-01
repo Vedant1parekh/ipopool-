@@ -38,7 +38,7 @@ export default async function AllotmentsPage({
   const { data: ipos } = await supabase
     .from("ipos")
     .select("id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status")
-    .eq("status", "closed")
+    .in("status", ["closed", "listed"])
     .order("listing_date", { ascending: false })
     .returns<Ipo[]>();
 

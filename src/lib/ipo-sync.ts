@@ -234,10 +234,11 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
     synced = count ?? mapped.length;
   }
 
-  // ipoalerts.in never gives us status=closed on this plan, so derive it
-  // ourselves: any IPO still marked "open" whose close date has already
-  // passed (i.e. today is after it) is actually closed by now.
+  // ipoalerts.in never gives us status=closed/listed on this plan, so
+  // derive both ourselves: an "open" IPO past its close date is closed,
+  // and a "closed" IPO past its listing date is listed.
   await supabase.from("ipos").update({ status: "closed" }).eq("status", "open").lt("close_date", today);
+  await supabase.from("ipos").update({ status: "listed" }).eq("status", "closed").lt("listing_date", today);
 
   const done = (totalPages !== null && nextPage > totalPages) || nextPage > DAILY_REQUEST_CAP;
 

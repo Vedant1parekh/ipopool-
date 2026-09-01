@@ -11,7 +11,7 @@ type PoolRow = {
   name: string;
   invite_code: string;
   category: string;
-  ipos: { name: string; type: string } | null;
+  ipos: { name: string; type: string; status: string } | null;
 };
 
 type ApplicationRow = {
@@ -41,7 +41,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
 
   const { data: pool } = await supabase
     .from("pools")
-    .select("id, name, invite_code, category, ipos(name, type)")
+    .select("id, name, invite_code, category, ipos(name, type, status)")
     .eq("id", id)
     .maybeSingle<PoolRow>();
 
@@ -150,6 +150,10 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
             const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
             const canJoin = !isOwner && !isCoMember && app.allotment_status === "pending";
             const canLeave = !isOwner && isCoMember;
+            const leaveDisabledReason =
+              pool.ipos?.status === "closed"
+                ? "Can't leave while the IPO is closed and awaiting allotment."
+                : undefined;
 
             return (
               <div key={app.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
@@ -165,7 +169,12 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                 <div className="flex items-center gap-2">
                   <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
                   {(canJoin || canLeave) && (
-                    <ClubButton poolId={id} applicationId={app.id} isMember={isCoMember} />
+                    <ClubButton
+                      poolId={id}
+                      applicationId={app.id}
+                      isMember={isCoMember}
+                      disabledReason={isCoMember ? leaveDisabledReason : undefined}
+                    />
                   )}
                 </div>
               </div>

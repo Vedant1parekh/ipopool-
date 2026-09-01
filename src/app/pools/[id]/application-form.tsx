@@ -13,10 +13,12 @@ export function ClubButton({
   poolId,
   applicationId,
   isMember,
+  disabledReason,
 }: {
   poolId: string;
   applicationId: string;
   isMember: boolean;
+  disabledReason?: string;
 }) {
   const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, _formData: FormData) => {
     const action = isMember ? unclubFromApplication : clubOnApplication;
@@ -25,9 +27,16 @@ export function ClubButton({
 
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
-      <Button type="submit" size="sm" variant={isMember ? "outline" : "secondary"} disabled={pending}>
+      <Button
+        type="submit"
+        size="sm"
+        variant={isMember ? "outline" : "secondary"}
+        disabled={pending || !!disabledReason}
+        title={disabledReason}
+      >
         {pending ? "Saving..." : isMember ? "Remove club in" : "Club in"}
       </Button>
+      {disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}
       {state.error && <p className="text-xs text-destructive">{state.error}</p>}
     </form>
   );
