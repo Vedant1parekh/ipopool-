@@ -71,7 +71,7 @@ export default async function PoolsPage() {
         <h2 className="mb-2 font-medium">Discover other pools</h2>
         <div className="flex flex-col gap-2">
           {otherPools.map((pool) => (
-            <PoolRow key={pool.id} pool={pool} canJoin />
+            <PoolRow key={pool.id} pool={pool} canJoin hasPan={hasPan} />
           ))}
           {otherPools.length === 0 && (
             <p className="text-sm text-muted-foreground">No other pools yet.</p>
@@ -82,7 +82,15 @@ export default async function PoolsPage() {
   );
 }
 
-function PoolRow({ pool, canJoin }: { pool: PoolWithMembers; canJoin?: boolean }) {
+function PoolRow({
+  pool,
+  canJoin,
+  hasPan,
+}: {
+  pool: PoolWithMembers;
+  canJoin?: boolean;
+  hasPan?: boolean;
+}) {
   const memberNames = (pool.pool_members ?? []).map((m) => m.profiles?.display_name ?? "Member");
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
@@ -96,7 +104,11 @@ function PoolRow({ pool, canJoin }: { pool: PoolWithMembers; canJoin?: boolean }
         {pool.category}
       </Badge>
       {canJoin ? (
-        <QuickJoinButton inviteCode={pool.invite_code} />
+        hasPan ? (
+          <QuickJoinButton inviteCode={pool.invite_code} />
+        ) : (
+          <span className="text-xs text-muted-foreground">Add a PAN card to join</span>
+        )
       ) : (
         <span className="font-mono text-xs text-muted-foreground">{pool.invite_code}</span>
       )}
