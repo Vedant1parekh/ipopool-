@@ -3,6 +3,7 @@ import { getUser } from "@/lib/dal";
 import { logout } from "@/app/logout/actions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { MobileNav } from "@/components/mobile-nav";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
@@ -35,6 +36,7 @@ export async function NavBar() {
                 </Link>
               ))}
             </div>
+            <MobileNav links={navLinks} />
             <ThemeToggle />
             <form action={logout}>
               <Button type="submit" variant="ghost" size="sm" className="ml-1">
