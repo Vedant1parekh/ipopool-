@@ -108,6 +108,25 @@ export async function addApplication(poolId: string, formData: FormData) {
     return { error: "This PAN has already applied in this pool — ask others to club onto it instead." };
   }
 
+  const { data: pool } = await supabase.from("pools").select("ipo_id").eq("id", poolId).single();
+
+  if (!pool) {
+    return { error: "Pool not found." };
+  }
+
+  const { count: usedInOtherCategory } = await supabase
+    .from("pool_applications")
+    .select("id, pools!inner(ipo_id)", { count: "exact", head: true })
+    .eq("pan_card_id", panCardId)
+    .eq("pools.ipo_id", pool.ipo_id)
+    .neq("pool_id", poolId);
+
+  if (usedInOtherCategory) {
+    return {
+      error: "This PAN has already applied to this IPO in a different category — a PAN can only apply once per IPO.",
+    };
+  }
+
   const { error } = await supabase.from("pool_applications").insert({
     pool_id: poolId,
     pan_card_id: panCardId,

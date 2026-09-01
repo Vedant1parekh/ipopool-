@@ -11,6 +11,7 @@ type PoolRow = {
   name: string;
   invite_code: string;
   category: string;
+  ipo_id: string;
   ipos: { name: string; type: string; status: string } | null;
 };
 
@@ -41,7 +42,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
 
   const { data: pool } = await supabase
     .from("pools")
-    .select("id, name, invite_code, category, ipos(name, type, status)")
+    .select("id, name, invite_code, category, ipo_id, ipos(name, type, status)")
     .eq("id", id)
     .maybeSingle<PoolRow>();
 
@@ -87,7 +88,20 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
   }
 
   const usedPanIds = new Set((applications ?? []).map((a) => a.pan_cards?.id).filter(Boolean));
-  const availablePanCards = (myPanCards ?? []).filter((p) => !usedPanIds.has(p.id));
+
+  const myPanCardIds = (myPanCards ?? []).map((p) => p.id);
+  const { data: ipoWideUsage } = myPanCardIds.length
+    ? await supabase
+        .from("pool_applications")
+        .select("pan_card_id, pools!inner(ipo_id)")
+        .in("pan_card_id", myPanCardIds)
+        .eq("pools.ipo_id", pool.ipo_id)
+    : { data: [] as { pan_card_id: string }[] };
+  const usedForThisIpoIds = new Set((ipoWideUsage ?? []).map((a) => a.pan_card_id));
+
+  const availablePanCards = (myPanCards ?? []).filter(
+    (p) => !usedPanIds.has(p.id) && !usedForThisIpoIds.has(p.id),
+  );
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
