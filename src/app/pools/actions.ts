@@ -39,6 +39,16 @@ export async function createPool(formData: FormData) {
     return { error: "Selected IPO could not be found." };
   }
 
+  const { count: existingPool } = await supabase
+    .from("pools")
+    .select("id", { count: "exact", head: true })
+    .eq("ipo_id", ipoId)
+    .eq("category", category);
+
+  if (existingPool) {
+    return { error: "A pool for this IPO and category already exists — join it from the list below instead." };
+  }
+
   const displayName =
     (user.user_metadata?.display_name as string | undefined) ?? user.email?.split("@")[0] ?? "user";
   const name = `${ipo.name}_${category}_${displayName}`;
@@ -51,6 +61,9 @@ export async function createPool(formData: FormData) {
     .single();
 
   if (error || !pool) {
+    if (error?.message.toLowerCase().includes("duplicate")) {
+      return { error: "A pool for this IPO and category already exists — join it from the list below instead." };
+    }
     return { error: error?.message ?? "Could not create pool." };
   }
 
