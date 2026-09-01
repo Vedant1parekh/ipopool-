@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/require-user";
 import type { IpoStatus, IpoType } from "@/lib/types";
+import { getLastSyncBatchAt, TEST_SYNC_EMAIL } from "@/lib/ipo-sync";
+import { SyncStatusDialog } from "./sync-status-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,10 +26,10 @@ type DashboardIpo = {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; syncTriggered?: string }>;
 }) {
-  const { supabase } = await requireUser();
-  const { type } = await searchParams;
+  const { supabase, user } = await requireUser();
+  const { type, syncTriggered } = await searchParams;
   const activeType: IpoType = type === "sme" ? "sme" : "mainboard";
 
   const { data: ipos, error } = await supabase
@@ -39,8 +41,17 @@ export default async function DashboardPage({
     .order("open_date", { ascending: true })
     .returns<DashboardIpo[]>();
 
+  // TEMPORARY test UI — remove once manual testing of the sync is done.
+  // Only shown when THIS login is what triggered a batch (syncTriggered=1
+  // set by the login action) — if cron already covered today before this
+  // user logged in, the login action's own claim is skipped and this param
+  // is absent, so the dialog stays hidden.
+  const showSyncDialog = user.email?.toLowerCase() === TEST_SYNC_EMAIL && syncTriggered === "1";
+  const lastBatchAt = showSyncDialog ? await getLastSyncBatchAt() : null;
+
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
+      {showSyncDialog && <SyncStatusDialog lastBatchAt={lastBatchAt} />}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">IPO Dashboard</h1>

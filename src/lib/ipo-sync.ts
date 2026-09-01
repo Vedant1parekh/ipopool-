@@ -1,23 +1,31 @@
 import { createClient } from "@supabase/supabase-js";
 import type { IpoStatus, IpoType } from "@/lib/types";
 
-// Shared by the Vercel Cron route (backup) and the login action (primary
-// trigger — first login of each calendar day). Provider: ipoalerts.in —
-// free tier: 6 req/min, 25/day, 750/month. Confirmed against a real key:
-// `status` is required and only "open"/"upcoming" are allowed on this plan
-// ("closed"/"listed" error with "This parameter is not supported for free
-// plan users"); `limit` isn't a valid param either — the API always
-// returns exactly 1 IPO per page; and firing more than 6 requests within a
-// minute gets a 429 (confirmed: pages 1-6 succeeded, page 7 failed).
+// Called by the Vercel Cron route only (see src/app/api/cron/sync-ipos) —
+// on the Hobby plan cron fires once daily, so this runs once a day.
+// Provider: ipoalerts.in — free tier: 6 req/min, 25/day, 750/month.
+// Confirmed against a real key: `status` is required and only
+// "open"/"upcoming" are allowed on this plan ("closed"/"listed" error with
+// "This parameter is not supported for free plan users"); `limit` isn't a
+// valid param either — the API always returns exactly 1 IPO per page; and
+// firing more than 6 requests within a minute gets a 429 (confirmed: pages
+// 1-6 succeeded, page 7 failed).
 //
 // Sleeping between requests to stay under 6/min would make this run for
 // minutes, risking a serverless function timeout — so instead each
 // invocation fetches only one batch of BATCH_SIZE pages and saves a resume
-// cursor (`next_page`/`total_pages` on ipo_sync_state); the next login or
-// cron run picks up where it left off, until the day's full page count is
-// covered.
+// cursor (`next_page`/`total_pages` on ipo_sync_state); the next cron run
+// picks up where it left off, until the day's full page count is covered
+// (which may take several days if there are many open IPOs, since cron
+// only fires once a day on this plan).
 
 const BATCH_SIZE = 6;
+const BATCH_COOLDOWN_MS = 65_000; // stay clear of the 6/min window resetting
+export const SYNC_BATCH_COOLDOWN_SECONDS = Math.floor(BATCH_COOLDOWN_MS / 1000);
+
+// TEMPORARY test hook target (see src/app/login/actions.ts and
+// src/app/dashboard/page.tsx) — remove once manual testing is done.
+export const TEST_SYNC_EMAIL = "vedantkparekh@gmail.com";
 
 type IpoAlertsRecord = {
   name: string;
@@ -141,11 +149,10 @@ export type SyncResult =
     }
   | { skipped: false; error: string };
 
-// Resumable across invocations: reads the saved cursor from
-// ipo_sync_state, fetches at most one batch, then saves the new cursor.
-// Not race-proof against two logins landing in the exact same instant
-// (both could fetch the same batch), but the upsert is idempotent so the
-// only cost is a wasted request — acceptable at this scale.
+// Resumable across invocations: claim_ipo_sync_batch() atomically decides
+// whether this invocation should run (row-locked in Postgres — cheap
+// insurance against overlapping cron runs, e.g. a retry), then this
+// fetches at most one batch and saves the new cursor.
 export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
   if (!process.env.IPO_DATA_API_KEY) {
     return { skipped: false, error: "IPO_DATA_API_KEY is not set." };
@@ -158,23 +165,21 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: state, error: stateError } = await supabase
-    .from("ipo_sync_state")
-    .select("last_synced_date, next_page, total_pages")
-    .eq("id", 1)
+  const { data: claim, error: claimError } = await supabase
+    .rpc("claim_ipo_sync_batch", { cooldown_seconds: Math.floor(BATCH_COOLDOWN_MS / 1000) })
+    .returns<{ should_run: boolean; start_page: number; known_total_pages: number | null }[]>()
     .single();
 
-  if (stateError || !state) {
-    return { skipped: false, error: stateError?.message ?? "ipo_sync_state row is missing." };
+  if (claimError || !claim) {
+    return { skipped: false, error: claimError?.message ?? "claim_ipo_sync_batch returned nothing." };
   }
 
-  const isNewDay = state.last_synced_date < today;
-  let nextPage = isNewDay ? 1 : state.next_page;
-  let totalPages: number | null = isNewDay ? null : state.total_pages;
-
-  if (!isNewDay && totalPages !== null && nextPage > totalPages) {
-    return { skipped: true }; // already fully synced today
+  if (!claim.should_run) {
+    return { skipped: true };
   }
+
+  let nextPage = claim.start_page;
+  let totalPages: number | null = claim.known_total_pages;
 
   const byKey = new Map<string, MappedIpo>();
   let pagesFetched = 0;
@@ -231,10 +236,26 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
 
   const done = totalPages !== null && nextPage > totalPages;
 
+  // last_synced_date/last_batch_at were already set atomically by the claim
+  // above; this just records how far this batch actually got.
   await supabase
     .from("ipo_sync_state")
-    .update({ last_synced_date: today, next_page: nextPage, total_pages: totalPages })
+    .update({ next_page: nextPage, total_pages: totalPages })
     .eq("id", 1);
 
   return { skipped: false, synced, pagesFetched, totalPages, done, hitRateLimit };
+}
+
+// TEMPORARY test hook — remove once manual testing of the sync is done.
+// ipo_sync_state has no RLS policies (service-role only by design), so this
+// reads it with the admin client rather than opening up a policy just for
+// a temporary test dialog.
+export async function getLastSyncBatchAt(): Promise<string | null> {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  const { data } = await supabase.from("ipo_sync_state").select("last_batch_at").eq("id", 1).single();
+  return data?.last_batch_at ?? null;
 }
