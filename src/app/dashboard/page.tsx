@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/require-user";
 import type { IpoStatus, IpoType } from "@/lib/types";
-import { getLastSyncBatchAt, TEST_SYNC_EMAIL } from "@/lib/ipo-sync";
-import { SyncStatusDialog } from "./sync-status-dialog";
+import { getSyncStateSummary, TEST_SYNC_EMAIL } from "@/lib/ipo-sync";
+import { SyncStatusBanner } from "./sync-status-banner";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,13 +45,12 @@ export default async function DashboardPage({
   // Only shown when THIS login is what triggered a batch (syncTriggered=1
   // set by the login action) — if cron already covered today before this
   // user logged in, the login action's own claim is skipped and this param
-  // is absent, so the dialog stays hidden.
-  const showSyncDialog = user.email?.toLowerCase() === TEST_SYNC_EMAIL && syncTriggered === "1";
-  const lastBatchAt = showSyncDialog ? await getLastSyncBatchAt() : null;
+  // is absent, so the banner stays hidden.
+  const showSyncBanner = user.email?.toLowerCase() === TEST_SYNC_EMAIL && syncTriggered === "1";
+  const syncState = showSyncBanner ? await getSyncStateSummary() : null;
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
-      {showSyncDialog && <SyncStatusDialog lastBatchAt={lastBatchAt} />}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">IPO Dashboard</h1>
@@ -61,6 +60,10 @@ export default async function DashboardPage({
         </div>
         <Button size="sm" render={<Link href="/pools">Join / manage pools</Link>} />
       </div>
+
+      {showSyncBanner && syncState && (
+        <SyncStatusBanner lastBatchAt={syncState.lastBatchAt} initialDone={syncState.done} />
+      )}
 
       <div className="mb-6 inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-[3px]">
         <TabLink label="Mainboard" type="mainboard" active={activeType === "mainboard"} />

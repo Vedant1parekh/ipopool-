@@ -22,6 +22,7 @@ import type { IpoStatus, IpoType } from "@/lib/types";
 const BATCH_SIZE = 6;
 const BATCH_COOLDOWN_MS = 65_000; // stay clear of the 6/min window resetting
 export const SYNC_BATCH_COOLDOWN_SECONDS = Math.floor(BATCH_COOLDOWN_MS / 1000);
+const DAILY_REQUEST_CAP = 25; // matches claim_ipo_sync_batch's daily_request_cap
 
 // TEMPORARY test hook target (see src/app/login/actions.ts and
 // src/app/dashboard/page.tsx) — remove once manual testing is done.
@@ -185,7 +186,11 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
   let pagesFetched = 0;
   let hitRateLimit = false;
 
-  while (pagesFetched < BATCH_SIZE && (totalPages === null || nextPage <= totalPages)) {
+  while (
+    pagesFetched < BATCH_SIZE &&
+    (totalPages === null || nextPage <= totalPages) &&
+    nextPage <= DAILY_REQUEST_CAP
+  ) {
     const providerResponse = await fetch(`https://api.ipoalerts.in/ipos?status=open&page=${nextPage}`, {
       headers: { "x-api-key": process.env.IPO_DATA_API_KEY },
     });
@@ -234,7 +239,7 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
   // passed (i.e. today is after it) is actually closed by now.
   await supabase.from("ipos").update({ status: "closed" }).eq("status", "open").lt("close_date", today);
 
-  const done = totalPages !== null && nextPage > totalPages;
+  const done = (totalPages !== null && nextPage > totalPages) || nextPage > DAILY_REQUEST_CAP;
 
   // last_synced_date/last_batch_at were already set atomically by the claim
   // above; this just records how far this batch actually got.
@@ -246,16 +251,26 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
   return { skipped: false, synced, pagesFetched, totalPages, done, hitRateLimit };
 }
 
+export type SyncStateSummary = { lastBatchAt: string | null; done: boolean };
+
 // TEMPORARY test hook — remove once manual testing of the sync is done.
 // ipo_sync_state has no RLS policies (service-role only by design), so this
 // reads it with the admin client rather than opening up a policy just for
 // a temporary test dialog.
-export async function getLastSyncBatchAt(): Promise<string | null> {
+export async function getSyncStateSummary(): Promise<SyncStateSummary> {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  const { data } = await supabase.from("ipo_sync_state").select("last_batch_at").eq("id", 1).single();
-  return data?.last_batch_at ?? null;
+  const { data } = await supabase
+    .from("ipo_sync_state")
+    .select("last_batch_at, next_page, total_pages")
+    .eq("id", 1)
+    .single();
+
+  if (!data) return { lastBatchAt: null, done: false };
+
+  const done = (data.total_pages !== null && data.next_page > data.total_pages) || data.next_page > DAILY_REQUEST_CAP;
+  return { lastBatchAt: data.last_batch_at, done };
 }
