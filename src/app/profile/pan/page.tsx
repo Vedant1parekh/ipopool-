@@ -1,8 +1,7 @@
 import { requireUser } from "@/lib/supabase/require-user";
 import type { PanCard } from "@/lib/types";
 import { PanForm } from "./pan-form";
-import { removePanCard } from "./actions";
-import { Button } from "@/components/ui/button";
+import { PanCardRow } from "./pan-card-row";
 
 export const dynamic = "force-dynamic";
 
@@ -27,20 +26,7 @@ export default async function PanCardsPage() {
 
       <div className="mt-6 flex flex-col gap-2">
         {panCards?.map((card) => (
-          <div
-            key={card.id}
-            className="flex items-center justify-between rounded-lg border p-3 text-sm"
-          >
-            <div>
-              <span className="font-mono">{card.pan_number}</span>
-              {card.label && <span className="ml-2 text-muted-foreground">{card.label}</span>}
-            </div>
-            <form action={removePanCard.bind(null, card.id)}>
-              <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
-                Remove
-              </Button>
-            </form>
-          </div>
+          <PanCardRow key={card.id} card={card} />
         ))}
         {(!panCards || panCards.length === 0) && (
           <p className="text-sm text-muted-foreground">No PAN cards yet — add one above.</p>

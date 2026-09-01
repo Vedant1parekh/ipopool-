@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getUser } from "@/lib/dal";
 import { logout } from "@/app/logout/actions";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
@@ -34,6 +35,7 @@ export async function NavBar() {
                 </Link>
               ))}
             </div>
+            <ThemeToggle />
             <form action={logout}>
               <Button type="submit" variant="ghost" size="sm" className="ml-1">
                 Log out
@@ -42,6 +44,7 @@ export async function NavBar() {
           </div>
         ) : (
           <div className="flex items-center gap-2 text-sm">
+            <ThemeToggle />
             <Link href="/login" className="px-2.5 py-1.5 text-muted-foreground hover:text-foreground">
               Log in
             </Link>

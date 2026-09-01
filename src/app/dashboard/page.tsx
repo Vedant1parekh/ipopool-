@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/supabase/require-user";
 import type { IpoStatus, IpoType } from "@/lib/types";
-import { getSyncStateSummary, TEST_SYNC_EMAIL } from "@/lib/ipo-sync";
+import { getSyncStateSummary, syncOpenIposIfNeeded, TEST_SYNC_EMAIL } from "@/lib/ipo-sync";
 import { SyncStatusBanner } from "./sync-status-banner";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,10 +26,10 @@ type DashboardIpo = {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; syncTriggered?: string }>;
+  searchParams: Promise<{ type?: string }>;
 }) {
   const { supabase, user } = await requireUser();
-  const { type, syncTriggered } = await searchParams;
+  const { type } = await searchParams;
   const activeType: IpoType = type === "sme" ? "sme" : "mainboard";
 
   const { data: ipos, error } = await supabase
@@ -42,11 +42,19 @@ export default async function DashboardPage({
     .returns<DashboardIpo[]>();
 
   // TEMPORARY test UI — remove once manual testing of the sync is done.
-  // Only shown when THIS login is what triggered a batch (syncTriggered=1
-  // set by the login action) — if cron already covered today before this
-  // user logged in, the login action's own claim is skipped and this param
-  // is absent, so the banner stays hidden.
-  const showSyncBanner = user.email?.toLowerCase() === TEST_SYNC_EMAIL && syncTriggered === "1";
+  // Reflects live state on every visit to this page (not just right after
+  // login), so switching tabs and coming back still shows the current
+  // cooldown/done status instead of only working immediately post-login.
+  const showSyncBanner = user.email?.toLowerCase() === TEST_SYNC_EMAIL;
+  let syncMessage: string | null = null;
+  if (showSyncBanner) {
+    const result = await syncOpenIposIfNeeded();
+    if (!result.skipped) {
+      syncMessage = "error" in result
+        ? `Error: ${result.error}`
+        : `Fetched ${result.pagesFetched} page(s), synced ${result.synced} IPO(s).`;
+    }
+  }
   const syncState = showSyncBanner ? await getSyncStateSummary() : null;
 
   return (
@@ -62,7 +70,11 @@ export default async function DashboardPage({
       </div>
 
       {showSyncBanner && syncState && (
-        <SyncStatusBanner lastBatchAt={syncState.lastBatchAt} initialDone={syncState.done} />
+        <SyncStatusBanner
+          lastBatchAt={syncState.lastBatchAt}
+          initialDone={syncState.done}
+          initialMessage={syncMessage}
+        />
       )}
 
       <div className="mb-6 inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-[3px]">
