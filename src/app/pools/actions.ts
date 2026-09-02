@@ -144,34 +144,63 @@ export async function addApplication(poolId: string, formData: FormData) {
 
 // A pool member without a spare PAN can club onto someone else's already-
 // submitted application instead of being locked out. Blocked (via RLS) once
-// the PAN's own allotment result is in, or for the PAN's own owner. A member
-// can be actively clubbed into at most as many applications, in this pool,
-// as they own PAN cards — otherwise one person with one PAN could club onto
-// every application someone else split across their several PAN cards.
-// Leave one (unclubFromApplication) to free up a slot for a different one.
-export async function clubOnApplication(poolId: string, applicationId: string) {
+// the PAN's own allotment result is in, or for the PAN's own owner. Clubbing
+// is tied to one of the clubbing member's own PAN cards. The cap is per
+// application OWNER, not pool-wide: a member can be clubbed into at most as
+// many of one owner's applications as they own PAN cards (a different card
+// each time), but gets a fresh allowance against a different owner — so the
+// same card can back applications from several different owners, just never
+// two applications from the SAME owner.
+type ClubOwnerLookup = { pan_cards: { owner_id: string } | null };
+type MyClubRow = { pan_card_id: string | null; pool_applications: { pan_cards: { owner_id: string } | null } | null };
+
+export async function clubOnApplication(poolId: string, applicationId: string, panCardId: string) {
   const { supabase, user } = await requireUser();
 
-  const { count: myPanCardCount } = await supabase
+  if (!panCardId) {
+    return { error: "Choose a PAN card to club in with." };
+  }
+
+  const { count: ownsThisPan } = await supabase
     .from("pan_cards")
     .select("id", { count: "exact", head: true })
+    .eq("id", panCardId)
     .eq("owner_id", user.id);
 
-  const { count: myActiveClubsInPool } = await supabase
-    .from("pool_application_members")
-    .select("application_id, pool_applications!inner(pool_id)", { count: "exact", head: true })
-    .eq("profile_id", user.id)
-    .eq("pool_applications.pool_id", poolId);
+  if (!ownsThisPan) {
+    return { error: "You can only club in with your own PAN cards." };
+  }
 
-  if ((myActiveClubsInPool ?? 0) >= (myPanCardCount ?? 0)) {
-    return {
-      error: `You can only club into as many applications as you own PAN cards (${myPanCardCount ?? 0}) — remove an existing club-in first.`,
-    };
+  const { data: targetApp } = await supabase
+    .from("pool_applications")
+    .select("pan_cards!inner(owner_id)")
+    .eq("id", applicationId)
+    .single<ClubOwnerLookup>();
+
+  const ownerId = targetApp?.pan_cards?.owner_id;
+
+  if (!ownerId) {
+    return { error: "Application not found." };
+  }
+
+  const { data: myClubs } = await supabase
+    .from("pool_application_members")
+    .select("pan_card_id, pool_applications!inner(pool_id, pan_cards!inner(owner_id))")
+    .eq("profile_id", user.id)
+    .eq("pool_applications.pool_id", poolId)
+    .returns<MyClubRow[]>();
+
+  const alreadyUsedForOwner = (myClubs ?? []).some(
+    (c) => c.pan_card_id === panCardId && c.pool_applications?.pan_cards?.owner_id === ownerId,
+  );
+
+  if (alreadyUsedForOwner) {
+    return { error: "You've already used this PAN card to club onto one of this member's applications." };
   }
 
   const { error } = await supabase
     .from("pool_application_members")
-    .insert({ application_id: applicationId, profile_id: user.id });
+    .insert({ application_id: applicationId, profile_id: user.id, pan_card_id: panCardId });
 
   if (error) {
     return { error: error.message };

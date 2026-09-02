@@ -59,7 +59,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     supabase
       .from("pool_applications")
       .select(
-        "id, status, allotment_status, pan_cards(id, pan_number, label, owner_id, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
+        "id, status, allotment_status, pan_cards(id, pan_number, label, owner_id, profiles(display_name)), pool_application_members(profile_id, pan_card_id, profiles(display_name), pan_cards(pan_number, label))",
       )
       .eq("pool_id", id)
       .order("created_at", { ascending: false })
@@ -103,13 +103,21 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     (p) => !usedPanIds.has(p.id) && !usedForThisIpoIds.has(p.id),
   );
 
-  // A member can be clubbed into at most as many applications, in this pool,
-  // as they own PAN cards.
-  const myPanCardCount = (myPanCards ?? []).length;
-  const myClubCountInPool = (applications ?? []).filter((a) =>
-    a.pool_application_members.some((m) => m.profile_id === user.id),
-  ).length;
-  const reachedClubCap = myClubCountInPool >= myPanCardCount;
+  // A member can be clubbed into at most as many of one OWNER's applications
+  // as they own PAN cards (a different card each time) — but gets a fresh
+  // allowance against a different owner. So track which of my own cards
+  // I've already used, grouped by the owner of the application I used them
+  // on, and exclude only those from that owner's applications specifically.
+  const usedCardsByOwner = new Map<string, Set<string>>();
+  for (const app of applications ?? []) {
+    const ownerId = app.pan_cards?.owner_id;
+    if (!ownerId) continue;
+    const myClub = app.pool_application_members.find((m) => m.profile_id === user.id);
+    if (!myClub?.pan_card_id) continue;
+    const used = usedCardsByOwner.get(ownerId) ?? new Set<string>();
+    used.add(myClub.pan_card_id);
+    usedCardsByOwner.set(ownerId, used);
+  }
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
@@ -170,15 +178,17 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
             // hold several differently-labelled PAN cards (e.g. "Dad", "Mom").
             const memberIdentifiers = [
               app.pan_cards ? (app.pan_cards.label ?? app.pan_cards.pan_number) : "Unknown",
-              ...app.pool_application_members.map((m) => {
-                const cards = panCardsByMember.get(m.profile_id) ?? [];
-                if (cards.length === 0) return m.profiles?.display_name ?? "Member";
-                return cards.map((c) => c.label ?? c.pan_number).join("/");
-              }),
+              ...app.pool_application_members.map((m) =>
+                m.pan_cards ? (m.pan_cards.label ?? m.pan_cards.pan_number) : (m.profiles?.display_name ?? "Member"),
+              ),
             ];
             const isOwner = app.pan_cards?.owner_id === user.id;
             const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
-            const canJoin = !isOwner && !isCoMember && app.allotment_status === "pending" && !reachedClubCap;
+            const ownerId = app.pan_cards?.owner_id;
+            const usedForThisOwner = ownerId ? (usedCardsByOwner.get(ownerId) ?? new Set<string>()) : new Set<string>();
+            const availablePanCardsForRow = (myPanCards ?? []).filter((p) => !usedForThisOwner.has(p.id));
+            const canJoin =
+              !isOwner && !isCoMember && app.allotment_status === "pending" && availablePanCardsForRow.length > 0;
             const canLeave = !isOwner && isCoMember;
             const leaveDisabledReason =
               pool.ipos?.status === "closed"
@@ -205,11 +215,12 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                       applicationId={app.id}
                       isMember={isCoMember}
                       disabledReason={isCoMember ? leaveDisabledReason : undefined}
+                      panCards={availablePanCardsForRow}
                     />
                   )}
-                  {!isOwner && !isCoMember && reachedClubCap && app.allotment_status === "pending" && (
+                  {!isOwner && !isCoMember && app.allotment_status === "pending" && availablePanCardsForRow.length === 0 && (
                     <span className="text-xs text-muted-foreground">
-                      Clubbed into {myClubCountInPool}/{myPanCardCount} — your PAN card limit
+                      No PAN cards left to club onto this member&apos;s applications
                     </span>
                   )}
                 </div>

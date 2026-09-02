@@ -52,7 +52,9 @@ export type Pool = {
 
 export type ApplicationMember = {
   profile_id: string;
+  pan_card_id: string | null;
   profiles: { display_name: string } | null;
+  pan_cards: { pan_number: string; label: string | null } | null;
 };
 
 export function maskPan(pan: string) {

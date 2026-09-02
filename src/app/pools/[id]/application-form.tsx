@@ -9,40 +9,69 @@ import { Button } from "@/components/ui/button";
 
 const initialState = { error: null as string | null };
 
+const selectClass =
+  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+// Joining picks which of the clubbing member's own PAN cards backs it (each
+// card can only club onto one owner's applications once); leaving doesn't
+// need one, since it just frees that same card back up.
 export function ClubButton({
   poolId,
   applicationId,
   isMember,
   disabledReason,
+  panCards,
 }: {
   poolId: string;
   applicationId: string;
   isMember: boolean;
   disabledReason?: string;
+  panCards: PanCard[];
 }) {
-  const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, _formData: FormData) => {
-    const action = isMember ? unclubFromApplication : clubOnApplication;
-    return (await action(poolId, applicationId)) ?? initialState;
+  const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, formData: FormData) => {
+    if (isMember) {
+      return (await unclubFromApplication(poolId, applicationId)) ?? initialState;
+    }
+    const panCardId = String(formData.get("panCardId") ?? "");
+    return (await clubOnApplication(poolId, applicationId, panCardId)) ?? initialState;
   }, initialState);
+
+  if (isMember) {
+    return (
+      <form action={formAction} className="flex flex-col items-end gap-1">
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={pending || !!disabledReason}
+          title={disabledReason}
+        >
+          {pending ? "Saving..." : "Remove club in"}
+        </Button>
+        {disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}
+        {state.error && <p className="text-xs text-destructive">{state.error}</p>}
+      </form>
+    );
+  }
 
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
-      <Button
-        type="submit"
-        size="sm"
-        variant={isMember ? "outline" : "secondary"}
-        disabled={pending || !!disabledReason}
-        title={disabledReason}
-      >
-        {pending ? "Saving..." : isMember ? "Remove club in" : "Club in"}
-      </Button>
-      {disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}
+      <div className="flex items-center gap-1">
+        <select name="panCardId" required disabled={pending} className={selectClass}>
+          {panCards.map((pan) => (
+            <option key={pan.id} value={pan.id}>
+              {pan.label ? `${pan.label} (${pan.pan_number})` : pan.pan_number}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" size="sm" variant="secondary" disabled={pending}>
+          {pending ? "Saving..." : "Club in"}
+        </Button>
+      </div>
       {state.error && <p className="text-xs text-destructive">{state.error}</p>}
     </form>
   );
 }
-const selectClass =
-  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function ApplicationForm({ poolId, panCards }: { poolId: string; panCards: PanCard[] }) {
   const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, formData: FormData) => {
