@@ -56,8 +56,3 @@ export type ApplicationMember = {
   profiles: { display_name: string } | null;
   pan_cards: { pan_number: string; label: string | null } | null;
 };
-
-export function maskPan(pan: string) {
-  if (pan.length < 10) return pan;
-  return `${pan.slice(0, 3)}****${pan.slice(-1)}`;
-}

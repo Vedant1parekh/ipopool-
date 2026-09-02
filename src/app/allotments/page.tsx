@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/supabase/require-user";
-import { maskPan, type AllotmentStatus, type ApplicationMember, type Ipo } from "@/lib/types";
+import { type AllotmentStatus, type ApplicationMember, type Ipo } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 type ApplicationRow = {
   id: string;
   allotment_status: AllotmentStatus;
-  pools: { name: string; category: string; ipo_id: string } | null;
+  pools: { category: string; ipo_id: string } | null;
   pan_cards: {
     pan_number: string;
     label: string | null;
@@ -44,10 +44,14 @@ export default async function AllotmentsPage({
 
   let applications: ApplicationRow[] | null = null;
   if (selectedIpoId) {
+    // my_pool_applications (unlike pool_applications directly) is
+    // pre-restricted to rows the viewer is personally part of — as
+    // applicant or as a clubbed-in member — not every pool-mate's
+    // application, even within a shared pool.
     const { data } = await supabase
-      .from("pool_applications")
+      .from("my_pool_applications")
       .select(
-        "id, allotment_status, last_modified_by, pools!inner(name, category, ipo_id), pan_cards(pan_number, label, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
+        "id, allotment_status, last_modified_by, pools!inner(category, ipo_id), pan_cards(pan_number, label, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
       )
       .eq("pools.ipo_id", selectedIpoId)
       .order("created_at", { ascending: true })
@@ -107,8 +111,8 @@ export default async function AllotmentsPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Applicant</TableHead>
-                  <TableHead>PAN</TableHead>
-                  <TableHead>Pool</TableHead>
+                  <TableHead>PAN Label</TableHead>
+                  <TableHead>PAN Value</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Members</TableHead>
                   <TableHead>Status</TableHead>
@@ -126,10 +130,8 @@ export default async function AllotmentsPage({
                   return (
                     <TableRow key={app.id}>
                       <TableCell>{app.pan_cards?.profiles?.display_name ?? "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {app.pan_cards?.label ?? maskPan(app.pan_cards?.pan_number ?? "")}
-                      </TableCell>
-                      <TableCell>{app.pools?.name ?? "—"}</TableCell>
+                      <TableCell>{app.pan_cards?.label ?? "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{app.pan_cards?.pan_number ?? "—"}</TableCell>
                       <TableCell className="uppercase text-muted-foreground">{app.pools?.category}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{memberNames.join(", ")}</TableCell>
                       <TableCell>
