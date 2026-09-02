@@ -2,9 +2,10 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { manualTriggerIpoSync } from "./sync-actions";
+import { manualTriggerIpoSync, manualTriggerSyncPage } from "./sync-actions";
 import { SYNC_BATCH_COOLDOWN_SECONDS } from "@/lib/ipo-sync";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 // TEMPORARY test UI — remove once manual testing of the sync is done.
 // The dashboard page always renders this (for the test account) so it
@@ -62,6 +63,22 @@ export function SyncStatusBanner({
   const tone = done ? "done" : isError ? "error" : "pending";
   const disabled = done || secondsLeft > 0 || pending;
 
+  const [pageInput, setPageInput] = useState("");
+  const [pageState, pageFormAction, pagePending] = useActionState(
+    async (prev: { message: string | null }) => {
+      const page = Number(pageInput);
+      if (!Number.isInteger(page) || page < 1) {
+        return { message: "Error: enter a valid page number." };
+      }
+      const result = await manualTriggerSyncPage(page);
+      router.refresh();
+      if ("error" in result) return { message: `Error: ${result.error}` };
+      return { message: `Page ${result.page}: synced ${result.synced} IPO(s).` };
+    },
+    { message: null as string | null },
+  );
+  const pageDisabled = secondsLeft > 0 || pagePending || !pageInput;
+
   return (
     <div className={`mb-6 rounded-lg border p-4 ${TONE_CLASSES[tone]}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -85,6 +102,25 @@ export function SyncStatusBanner({
                 ? "Triggering..."
                 : "Retrigger now"}
         </Button>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Missed page recovery
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={pageInput}
+            onChange={(e) => setPageInput(e.target.value)}
+            placeholder="Page #"
+            className="h-8 w-24"
+          />
+        </label>
+        <Button size="sm" variant="outline" onClick={() => pageFormAction()} disabled={pageDisabled}>
+          {pagePending ? "Syncing..." : "Sync this page"}
+        </Button>
+        {pageState.message && <p className="w-full text-xs font-medium">{pageState.message}</p>}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
 import type { ApplicationMember, PanCard } from "@/lib/types";
-import { ApplicationForm, ClubButton } from "./application-form";
+import { ApplicationForm, ClubButton, RemovePoolButton } from "./application-form";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ type PoolRow = {
   invite_code: string;
   category: string;
   ipo_id: string;
-  ipos: { name: string; type: string; status: string } | null;
+  ipos: { name: string; type: string; status: string; listing_date: string | null } | null;
 };
 
 type ApplicationRow = {
@@ -42,13 +42,22 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
 
   const { data: pool } = await supabase
     .from("pools")
-    .select("id, name, invite_code, category, ipo_id, ipos(name, type, status)")
+    .select("id, name, invite_code, category, ipo_id, ipos(name, type, status, listing_date)")
     .eq("id", id)
     .maybeSingle<PoolRow>();
 
   if (!pool) {
     notFound();
   }
+
+  const listingDate = pool.ipos?.listing_date;
+  const removeEligibleFrom = listingDate ? new Date(listingDate) : null;
+  removeEligibleFrom?.setUTCDate(removeEligibleFrom.getUTCDate() + 1);
+  const removeDisabledReason = !listingDate
+    ? "Can only be removed one day after the IPO's listing date."
+    : new Date() < removeEligibleFrom!
+      ? `Can be removed from ${removeEligibleFrom!.toLocaleDateString()}.`
+      : undefined;
 
   const [{ data: members }, { data: applications }, { data: myPanCards }] = await Promise.all([
     supabase
@@ -133,7 +142,12 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-      <h1 className="text-2xl font-semibold">{pool.name}</h1>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="text-2xl font-semibold">{pool.name}</h1>
+        {members?.some((m) => m.profile_id === user.id) && (
+          <RemovePoolButton poolId={id} disabledReason={removeDisabledReason} />
+        )}
+      </div>
       <div className="mb-1 flex items-center gap-2 text-sm text-muted-foreground">
         <span>{pool.ipos?.name ?? "Unknown IPO"}</span>
         <span>·</span>

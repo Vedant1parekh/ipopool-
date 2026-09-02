@@ -252,6 +252,59 @@ export async function syncOpenIposIfNeeded(): Promise<SyncResult> {
   return { skipped: false, synced, pagesFetched, totalPages, done, hitRateLimit };
 }
 
+// TEMPORARY test hook — remove once manual testing of the sync is done.
+// One-off recovery: fetches exactly the page the caller asks for, in case
+// the batch cursor skipped past a page the cron never actually got to (a
+// crashed invocation, a deploy mid-batch, etc.). Doesn't touch
+// ipo_sync_state's resume cursor — this is a manual, out-of-band hit, not
+// part of the resumable batch sequence.
+export async function syncSinglePage(
+  page: number,
+): Promise<{ error: string } | { error?: undefined; page: number; synced: number }> {
+  if (!process.env.IPO_DATA_API_KEY) {
+    return { error: "IPO_DATA_API_KEY is not set." };
+  }
+
+  if (!Number.isInteger(page) || page < 1) {
+    return { error: "Page must be a positive whole number." };
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  const providerResponse = await fetch(`https://api.ipoalerts.in/ipos?status=open&page=${page}`, {
+    headers: { "x-api-key": process.env.IPO_DATA_API_KEY },
+  });
+
+  if (!providerResponse.ok) {
+    return { error: `ipoalerts.in request failed on page ${page}: ${providerResponse.status}` };
+  }
+
+  const payload = (await providerResponse.json()) as IpoAlertsResponse;
+  const mapped = (payload.ipos ?? [])
+    .map(mapRecord)
+    .filter((m): m is MappedIpo => m !== null);
+
+  if (mapped.length === 0) {
+    return { page, synced: 0 };
+  }
+
+  const { error, count } = await supabase
+    .from("ipos")
+    .upsert(
+      mapped.map((ipo) => ({ ...ipo, last_synced_at: new Date().toISOString() })),
+      { onConflict: "name,type", count: "exact" },
+    );
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { page, synced: count ?? mapped.length };
+}
+
 export type SyncStateSummary = { lastBatchAt: string | null; done: boolean };
 
 // TEMPORARY test hook — remove once manual testing of the sync is done.
