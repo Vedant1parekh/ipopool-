@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/supabase/require-user";
 import type { ApplicationMember, PanCard } from "@/lib/types";
 import { ApplicationForm, ClubButton, RemovePoolButton } from "./application-form";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
       .from("pan_cards")
       .select("id, owner_id, pan_number, label, created_at")
       .eq("owner_id", user.id)
+      .order("label", { ascending: true })
       .returns<PanCard[]>(),
   ]);
 
@@ -86,6 +88,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
         .from("pan_cards")
         .select("owner_id, pan_number, label")
         .in("owner_id", memberIds)
+        .order("label", { ascending: true })
         .returns<MemberPanCard[]>()
     : { data: [] as MemberPanCard[] };
 
@@ -138,6 +141,16 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     const used = usedCardsByOwner.get(ownerId) ?? new Set<string>();
     used.add(myClub.pan_card_id);
     usedCardsByOwner.set(ownerId, used);
+  }
+
+  // One table per applicant, instead of one long undifferentiated list —
+  // easier to scan when someone has applied with several PAN cards.
+  const applicationsByOwner = new Map<string, ApplicationRow[]>();
+  for (const app of applications ?? []) {
+    const ownerId = app.pan_cards?.owner_id ?? "unknown";
+    const list = applicationsByOwner.get(ownerId) ?? [];
+    list.push(app);
+    applicationsByOwner.set(ownerId, list);
   }
 
   return (
@@ -196,68 +209,87 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
         <p className="mb-3 text-xs text-muted-foreground">
           No spare PAN? Club onto someone else&apos;s application instead of applying separately.
         </p>
-        <div className="flex flex-col gap-2">
-          {applications?.map((app) => {
-            // Identify each participant by their PAN's label (falling back to the
-            // PAN number, then their account name if they have no PAN on file) —
-            // clearer for pool-mates than an account name, since one account can
-            // hold several differently-labelled PAN cards (e.g. "Dad", "Mom").
-            const memberIdentifiers = [
-              app.pan_cards ? (app.pan_cards.label ?? app.pan_cards.pan_number) : "Unknown",
-              ...app.pool_application_members.map((m) =>
-                m.pan_cards ? (m.pan_cards.label ?? m.pan_cards.pan_number) : (m.profiles?.display_name ?? "Member"),
-              ),
-            ];
-            const isOwner = app.pan_cards?.owner_id === user.id;
-            const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
-            const ownerId = app.pan_cards?.owner_id;
-            const usedForThisOwner = ownerId ? (usedCardsByOwner.get(ownerId) ?? new Set<string>()) : new Set<string>();
-            const availablePanCardsForRow = myAppliedPanCards.filter((p) => !usedForThisOwner.has(p.id));
-            const canJoin =
-              !isOwner &&
-              !isCoMember &&
-              app.status === "applied" &&
-              app.allotment_status === "pending" &&
-              availablePanCardsForRow.length > 0;
-            const canLeave = !isOwner && isCoMember;
-            const leaveDisabledReason =
-              pool.ipos?.status === "closed"
-                ? "Can't leave while the IPO is closed and awaiting allotment."
-                : undefined;
-
+        <div className="flex flex-col gap-4">
+          {Array.from(applicationsByOwner.entries()).map(([ownerId, apps]) => {
+            const ownerName = apps[0]?.pan_cards?.profiles?.display_name ?? "Unknown";
             return (
-              <div key={app.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-mono text-muted-foreground">
-                    {app.pan_cards?.pan_number ?? "—"}
-                    {app.pan_cards?.label && <span className="ml-2 font-sans">{app.pan_cards.label}</span>}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {memberIdentifiers.join(", ")} · {memberIdentifiers.length} member
-                    {memberIdentifiers.length === 1 ? "" : "s"}
-                  </span>
+              <div key={ownerId} className="overflow-hidden rounded-lg border">
+                <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">
+                  {ownerName} · {apps.length} application{apps.length === 1 ? "" : "s"}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
-                  {(canJoin || canLeave) && (
-                    <ClubButton
-                      poolId={id}
-                      applicationId={app.id}
-                      isMember={isCoMember}
-                      disabledReason={isCoMember ? leaveDisabledReason : undefined}
-                      panCards={availablePanCardsForRow}
-                    />
-                  )}
-                  {!isOwner &&
-                    !isCoMember &&
-                    app.status === "applied" &&
-                    app.allotment_status === "pending" &&
-                    availablePanCardsForRow.length === 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        No PAN cards left to club onto this member&apos;s applications
-                      </span>
-                    )}
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>PAN</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Clubbed with</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {apps.map((app) => {
+                      // Co-members only — the applicant is already the row itself.
+                      const coMemberIdentifiers = app.pool_application_members.map((m) =>
+                        m.pan_cards
+                          ? (m.pan_cards.label ?? m.pan_cards.pan_number)
+                          : (m.profiles?.display_name ?? "Member"),
+                      );
+                      const isOwner = app.pan_cards?.owner_id === user.id;
+                      const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
+                      const rowOwnerId = app.pan_cards?.owner_id;
+                      const usedForThisOwner = rowOwnerId
+                        ? (usedCardsByOwner.get(rowOwnerId) ?? new Set<string>())
+                        : new Set<string>();
+                      const availablePanCardsForRow = myAppliedPanCards.filter((p) => !usedForThisOwner.has(p.id));
+                      const canJoin =
+                        !isOwner &&
+                        !isCoMember &&
+                        app.status === "applied" &&
+                        app.allotment_status === "pending" &&
+                        availablePanCardsForRow.length > 0;
+                      const canLeave = !isOwner && isCoMember;
+                      const leaveDisabledReason =
+                        pool.ipos?.status === "closed"
+                          ? "Can't leave while the IPO is closed and awaiting allotment."
+                          : undefined;
+
+                      return (
+                        <TableRow key={app.id}>
+                          <TableCell>
+                            <span className="font-mono">{app.pan_cards?.pan_number ?? "—"}</span>
+                            {app.pan_cards?.label && (
+                              <span className="ml-2 text-xs text-muted-foreground">{app.pan_cards.label}</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={app.status === "applied" ? "default" : "secondary"}>{app.status}</Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-normal text-xs text-muted-foreground">
+                            {coMemberIdentifiers.length > 0 ? coMemberIdentifiers.join(", ") : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {(canJoin || canLeave) && (
+                              <ClubButton
+                                poolId={id}
+                                applicationId={app.id}
+                                isMember={isCoMember}
+                                disabledReason={isCoMember ? leaveDisabledReason : undefined}
+                                panCards={availablePanCardsForRow}
+                              />
+                            )}
+                            {!isOwner &&
+                              !isCoMember &&
+                              app.status === "applied" &&
+                              app.allotment_status === "pending" &&
+                              availablePanCardsForRow.length === 0 && (
+                                <span className="text-xs text-muted-foreground">No PAN cards left</span>
+                              )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
             );
           })}

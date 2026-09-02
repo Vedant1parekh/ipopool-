@@ -12,7 +12,7 @@ export default async function PanCardsPage() {
     .from("pan_cards")
     .select("id, owner_id, pan_number, label, created_at")
     .eq("owner_id", user.id)
-    .order("created_at", { ascending: true })
+    .order("label", { ascending: true })
     .returns<PanCard[]>();
 
   return (
