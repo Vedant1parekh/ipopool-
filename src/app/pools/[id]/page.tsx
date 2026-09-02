@@ -94,6 +94,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
         .select("pan_card_id, pools!inner(ipo_id)")
         .in("pan_card_id", myPanCardIds)
         .eq("pools.ipo_id", pool.ipo_id)
+        .neq("pool_id", id)
     : { data: [] as { pan_card_id: string }[] };
   const usedForThisIpoIds = new Set((ipoWideUsage ?? []).map((a) => a.pan_card_id));
 
