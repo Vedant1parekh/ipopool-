@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const initialState = { error: null as string | null, duplicate: false };
+const initialRemoveState = { error: null as string | null };
 
 export function PanCardRow({ card }: { card: PanCard }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -26,6 +27,11 @@ export function PanCardRow({ card }: { card: PanCard }) {
     if (!result.error) setIsEditing(false);
     return result;
   }, initialState);
+
+  const [removeState, removeAction, removePending] = useActionState(
+    async (_prev: typeof initialRemoveState) => (await removePanCard(card.id)) ?? initialRemoveState,
+    initialRemoveState,
+  );
 
   useEffect(() => {
     if (state.duplicate) setDialogOpen(true);
@@ -75,21 +81,30 @@ export function PanCardRow({ card }: { card: PanCard }) {
   }
 
   return (
-    <div className="flex items-center justify-between rounded-lg border p-3 text-sm">
-      <div>
-        <span className="font-mono">{card.pan_number}</span>
-        {card.label && <span className="ml-2 text-muted-foreground">{card.label}</span>}
-      </div>
-      <div className="flex gap-1">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
-          Edit
-        </Button>
-        <form action={removePanCard.bind(null, card.id)}>
-          <Button type="submit" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
-            Remove
+    <div className="flex flex-col gap-1 rounded-lg border p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="font-mono">{card.pan_number}</span>
+          {card.label && <span className="ml-2 text-muted-foreground">{card.label}</span>}
+        </div>
+        <div className="flex gap-1">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+            Edit
           </Button>
-        </form>
+          <form action={removeAction}>
+            <Button
+              type="submit"
+              variant="ghost"
+              size="sm"
+              disabled={removePending}
+              className="text-muted-foreground hover:text-destructive"
+            >
+              {removePending ? "Removing..." : "Remove"}
+            </Button>
+          </form>
+        </div>
       </div>
+      {removeState.error && <p className="text-xs text-destructive">{removeState.error}</p>}
     </div>
   );
 }

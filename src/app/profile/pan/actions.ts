@@ -72,7 +72,34 @@ export async function updatePanCard(panCardId: string, formData: FormData) {
 export async function removePanCard(panCardId: string) {
   const { supabase, user } = await requireUser();
 
-  await supabase.from("pan_cards").delete().eq("id", panCardId).eq("owner_id", user.id);
+  // pool_applications and pool_application_members both cascade-delete on
+  // pan_cards, so removing a PAN that's already applied or clubbed in would
+  // silently wipe that application (or someone else's club-in on it) too.
+  const { count: usedInApplication } = await supabase
+    .from("pool_applications")
+    .select("id", { count: "exact", head: true })
+    .eq("pan_card_id", panCardId)
+    .eq("status", "applied");
+
+  if (usedInApplication) {
+    return { error: "You cannot remove this PAN — it's already applied in a pool." };
+  }
+
+  const { count: usedForClubbing } = await supabase
+    .from("pool_application_members")
+    .select("profile_id", { count: "exact", head: true })
+    .eq("pan_card_id", panCardId);
+
+  if (usedForClubbing) {
+    return { error: "You cannot remove this PAN — it's already clubbed onto an application." };
+  }
+
+  const { error } = await supabase.from("pan_cards").delete().eq("id", panCardId).eq("owner_id", user.id);
+
+  if (error) {
+    return { error: error.message };
+  }
 
   revalidatePath("/profile/pan");
+  return { error: null };
 }

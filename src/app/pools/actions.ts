@@ -121,6 +121,22 @@ export async function addApplication(poolId: string, formData: FormData) {
         error: "Other members are clubbed onto this application — remove their club-ins before marking it not applicable.",
       };
     }
+
+    // The other direction: this PAN itself may have been used to club onto
+    // someone ELSE's application in this pool. Club-in eligibility requires
+    // status "applied", so flipping this PAN away from "applied" would
+    // silently leave that club-in resting on a PAN that's no longer applied.
+    const { count: usedToClubElsewhere } = await supabase
+      .from("pool_application_members")
+      .select("application_id, pool_applications!inner(pool_id)", { count: "exact", head: true })
+      .eq("pan_card_id", panCardId)
+      .eq("pool_applications.pool_id", poolId);
+
+    if (usedToClubElsewhere) {
+      return {
+        error: "This PAN has already clubbed onto another application in this pool — it cannot be marked not applicable.",
+      };
+    }
   }
 
   const { data: pool } = await supabase.from("pools").select("ipo_id").eq("id", poolId).single();
