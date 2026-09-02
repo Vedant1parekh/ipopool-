@@ -87,8 +87,6 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     panCardsByMember.set(card.owner_id, list);
   }
 
-  const usedPanIds = new Set((applications ?? []).map((a) => a.pan_cards?.id).filter(Boolean));
-
   const myPanCardIds = (myPanCards ?? []).map((p) => p.id);
   const { data: ipoWideUsage } = myPanCardIds.length
     ? await supabase
@@ -99,17 +97,19 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     : { data: [] as { pan_card_id: string }[] };
   const usedForThisIpoIds = new Set((ipoWideUsage ?? []).map((a) => a.pan_card_id));
 
-  const availablePanCards = (myPanCards ?? []).filter(
-    (p) => !usedPanIds.has(p.id) && !usedForThisIpoIds.has(p.id),
-  );
+  // Every owned PAN stays selectable here, including one already logged in
+  // this pool — re-selecting it updates that row (e.g. flipping applied/na),
+  // handled in addApplication. Only cross-pool usage for the same IPO stays
+  // excluded, since that's a hard one-PAN-per-IPO rule, not an editable row.
+  const availablePanCards = (myPanCards ?? []).filter((p) => !usedForThisIpoIds.has(p.id));
 
-  // Clubbing in should only spend a PAN card that's already applied in this
-  // pool — not any idle card the member happens to own — since clubbing is
-  // for someone using an already-committed PAN as their identity to back
-  // someone else's application, not a fresh unused card.
+  // Clubbing in should only spend a PAN card that's actually applied in this
+  // pool (status "applied", not "na") — not any idle card the member
+  // happens to own — since clubbing is for someone using an already-
+  // committed PAN as their identity to back someone else's application.
   const myAppliedPanCardIds = new Set(
     (applications ?? [])
-      .filter((a) => a.pan_cards?.owner_id === user.id)
+      .filter((a) => a.pan_cards?.owner_id === user.id && a.status === "applied")
       .map((a) => a.pan_cards!.id),
   );
   const myAppliedPanCards = (myPanCards ?? []).filter((p) => myAppliedPanCardIds.has(p.id));
@@ -199,7 +199,11 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
             const usedForThisOwner = ownerId ? (usedCardsByOwner.get(ownerId) ?? new Set<string>()) : new Set<string>();
             const availablePanCardsForRow = myAppliedPanCards.filter((p) => !usedForThisOwner.has(p.id));
             const canJoin =
-              !isOwner && !isCoMember && app.allotment_status === "pending" && availablePanCardsForRow.length > 0;
+              !isOwner &&
+              !isCoMember &&
+              app.status === "applied" &&
+              app.allotment_status === "pending" &&
+              availablePanCardsForRow.length > 0;
             const canLeave = !isOwner && isCoMember;
             const leaveDisabledReason =
               pool.ipos?.status === "closed"
@@ -229,11 +233,15 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                       panCards={availablePanCardsForRow}
                     />
                   )}
-                  {!isOwner && !isCoMember && app.allotment_status === "pending" && availablePanCardsForRow.length === 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      No PAN cards left to club onto this member&apos;s applications
-                    </span>
-                  )}
+                  {!isOwner &&
+                    !isCoMember &&
+                    app.status === "applied" &&
+                    app.allotment_status === "pending" &&
+                    availablePanCardsForRow.length === 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        No PAN cards left to club onto this member&apos;s applications
+                      </span>
+                    )}
                 </div>
               </div>
             );

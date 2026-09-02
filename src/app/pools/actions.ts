@@ -98,14 +98,29 @@ export async function addApplication(poolId: string, formData: FormData) {
     return { error: "You can only log applications for your own PAN cards." };
   }
 
-  const { count: alreadyApplied } = await supabase
+  // Re-selecting a PAN that already has a row in this pool updates that row
+  // instead of blocking or creating a duplicate — including flipping an
+  // "applied" row back to "na" (e.g. correcting a mistaken entry). The one
+  // guard: don't allow that flip while other members are clubbed onto it,
+  // since that would silently strand their club-in on a non-application.
+  const { data: existing } = await supabase
     .from("pool_applications")
-    .select("id", { count: "exact", head: true })
+    .select("id, status")
     .eq("pool_id", poolId)
-    .eq("pan_card_id", panCardId);
+    .eq("pan_card_id", panCardId)
+    .maybeSingle();
 
-  if (alreadyApplied) {
-    return { error: "This PAN has already applied in this pool — ask others to club onto it instead." };
+  if (existing && status !== "applied") {
+    const { count: hasClubMembers } = await supabase
+      .from("pool_application_members")
+      .select("profile_id", { count: "exact", head: true })
+      .eq("application_id", existing.id);
+
+    if (hasClubMembers) {
+      return {
+        error: "Other members are clubbed onto this application — remove their club-ins before marking it not applicable.",
+      };
+    }
   }
 
   const { data: pool } = await supabase.from("pools").select("ipo_id").eq("id", poolId).single();
@@ -127,12 +142,14 @@ export async function addApplication(poolId: string, formData: FormData) {
     };
   }
 
-  const { error } = await supabase.from("pool_applications").insert({
-    pool_id: poolId,
-    pan_card_id: panCardId,
-    status,
-    created_by: user.id,
-  });
+  const { error } = existing
+    ? await supabase.from("pool_applications").update({ status }).eq("id", existing.id)
+    : await supabase.from("pool_applications").insert({
+        pool_id: poolId,
+        pan_card_id: panCardId,
+        status,
+        created_by: user.id,
+      });
 
   if (error) {
     return { error: error.message };
@@ -151,7 +168,7 @@ export async function addApplication(poolId: string, formData: FormData) {
 // each time), but gets a fresh allowance against a different owner — so the
 // same card can back applications from several different owners, just never
 // two applications from the SAME owner.
-type ClubOwnerLookup = { pan_cards: { owner_id: string } | null };
+type ClubOwnerLookup = { status: string; pan_cards: { owner_id: string } | null };
 type MyClubRow = { pan_card_id: string | null; pool_applications: { pan_cards: { owner_id: string } | null } | null };
 
 export async function clubOnApplication(poolId: string, applicationId: string, panCardId: string) {
@@ -175,15 +192,16 @@ export async function clubOnApplication(poolId: string, applicationId: string, p
     .from("pool_applications")
     .select("id", { count: "exact", head: true })
     .eq("pool_id", poolId)
-    .eq("pan_card_id", panCardId);
+    .eq("pan_card_id", panCardId)
+    .eq("status", "applied");
 
   if (!hasAppliedInPool) {
-    return { error: "You can only club in with a PAN card that has already applied in this pool." };
+    return { error: "You can only club in with a PAN card that has actually applied in this pool." };
   }
 
   const { data: targetApp } = await supabase
     .from("pool_applications")
-    .select("pan_cards!inner(owner_id)")
+    .select("status, pan_cards!inner(owner_id)")
     .eq("id", applicationId)
     .single<ClubOwnerLookup>();
 
@@ -191,6 +209,10 @@ export async function clubOnApplication(poolId: string, applicationId: string, p
 
   if (!ownerId) {
     return { error: "Application not found." };
+  }
+
+  if (targetApp.status !== "applied") {
+    return { error: "You can only club onto an application that's actually been applied." };
   }
 
   const { data: myClubs } = await supabase
