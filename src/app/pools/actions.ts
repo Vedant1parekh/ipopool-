@@ -144,9 +144,30 @@ export async function addApplication(poolId: string, formData: FormData) {
 
 // A pool member without a spare PAN can club onto someone else's already-
 // submitted application instead of being locked out. Blocked (via RLS) once
-// the PAN's own allotment result is in, or for the PAN's own owner.
+// the PAN's own allotment result is in, or for the PAN's own owner. A member
+// can be actively clubbed into at most as many applications, in this pool,
+// as they own PAN cards — otherwise one person with one PAN could club onto
+// every application someone else split across their several PAN cards.
+// Leave one (unclubFromApplication) to free up a slot for a different one.
 export async function clubOnApplication(poolId: string, applicationId: string) {
   const { supabase, user } = await requireUser();
+
+  const { count: myPanCardCount } = await supabase
+    .from("pan_cards")
+    .select("id", { count: "exact", head: true })
+    .eq("owner_id", user.id);
+
+  const { count: myActiveClubsInPool } = await supabase
+    .from("pool_application_members")
+    .select("application_id, pool_applications!inner(pool_id)", { count: "exact", head: true })
+    .eq("profile_id", user.id)
+    .eq("pool_applications.pool_id", poolId);
+
+  if ((myActiveClubsInPool ?? 0) >= (myPanCardCount ?? 0)) {
+    return {
+      error: `You can only club into as many applications as you own PAN cards (${myPanCardCount ?? 0}) — remove an existing club-in first.`,
+    };
+  }
 
   const { error } = await supabase
     .from("pool_application_members")

@@ -103,6 +103,14 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     (p) => !usedPanIds.has(p.id) && !usedForThisIpoIds.has(p.id),
   );
 
+  // A member can be clubbed into at most as many applications, in this pool,
+  // as they own PAN cards.
+  const myPanCardCount = (myPanCards ?? []).length;
+  const myClubCountInPool = (applications ?? []).filter((a) =>
+    a.pool_application_members.some((m) => m.profile_id === user.id),
+  ).length;
+  const reachedClubCap = myClubCountInPool >= myPanCardCount;
+
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-semibold">{pool.name}</h1>
@@ -156,13 +164,21 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
         </p>
         <div className="flex flex-col gap-2">
           {applications?.map((app) => {
-            const memberNames = [
-              app.pan_cards?.profiles?.display_name ?? "Unknown",
-              ...app.pool_application_members.map((m) => m.profiles?.display_name ?? "Member"),
+            // Identify each participant by their PAN's label (falling back to the
+            // PAN number, then their account name if they have no PAN on file) —
+            // clearer for pool-mates than an account name, since one account can
+            // hold several differently-labelled PAN cards (e.g. "Dad", "Mom").
+            const memberIdentifiers = [
+              app.pan_cards ? (app.pan_cards.label ?? app.pan_cards.pan_number) : "Unknown",
+              ...app.pool_application_members.map((m) => {
+                const cards = panCardsByMember.get(m.profile_id) ?? [];
+                if (cards.length === 0) return m.profiles?.display_name ?? "Member";
+                return cards.map((c) => c.label ?? c.pan_number).join("/");
+              }),
             ];
             const isOwner = app.pan_cards?.owner_id === user.id;
             const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
-            const canJoin = !isOwner && !isCoMember && app.allotment_status === "pending";
+            const canJoin = !isOwner && !isCoMember && app.allotment_status === "pending" && !reachedClubCap;
             const canLeave = !isOwner && isCoMember;
             const leaveDisabledReason =
               pool.ipos?.status === "closed"
@@ -177,7 +193,8 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                     {app.pan_cards?.label && <span className="ml-2 font-sans">{app.pan_cards.label}</span>}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {memberNames.join(", ")} · {memberNames.length} member{memberNames.length === 1 ? "" : "s"}
+                    {memberIdentifiers.join(", ")} · {memberIdentifiers.length} member
+                    {memberIdentifiers.length === 1 ? "" : "s"}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -189,6 +206,11 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                       isMember={isCoMember}
                       disabledReason={isCoMember ? leaveDisabledReason : undefined}
                     />
+                  )}
+                  {!isOwner && !isCoMember && reachedClubCap && app.allotment_status === "pending" && (
+                    <span className="text-xs text-muted-foreground">
+                      Clubbed into {myClubCountInPool}/{myPanCardCount} — your PAN card limit
+                    </span>
                   )}
                 </div>
               </div>
