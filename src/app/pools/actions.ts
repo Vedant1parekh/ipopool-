@@ -171,6 +171,16 @@ export async function clubOnApplication(poolId: string, applicationId: string, p
     return { error: "You can only club in with your own PAN cards." };
   }
 
+  const { count: hasAppliedInPool } = await supabase
+    .from("pool_applications")
+    .select("id", { count: "exact", head: true })
+    .eq("pool_id", poolId)
+    .eq("pan_card_id", panCardId);
+
+  if (!hasAppliedInPool) {
+    return { error: "You can only club in with a PAN card that has already applied in this pool." };
+  }
+
   const { data: targetApp } = await supabase
     .from("pool_applications")
     .select("pan_cards!inner(owner_id)")

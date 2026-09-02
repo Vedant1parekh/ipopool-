@@ -103,6 +103,17 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     (p) => !usedPanIds.has(p.id) && !usedForThisIpoIds.has(p.id),
   );
 
+  // Clubbing in should only spend a PAN card that's already applied in this
+  // pool — not any idle card the member happens to own — since clubbing is
+  // for someone using an already-committed PAN as their identity to back
+  // someone else's application, not a fresh unused card.
+  const myAppliedPanCardIds = new Set(
+    (applications ?? [])
+      .filter((a) => a.pan_cards?.owner_id === user.id)
+      .map((a) => a.pan_cards!.id),
+  );
+  const myAppliedPanCards = (myPanCards ?? []).filter((p) => myAppliedPanCardIds.has(p.id));
+
   // A member can be clubbed into at most as many of one OWNER's applications
   // as they own PAN cards (a different card each time) — but gets a fresh
   // allowance against a different owner. So track which of my own cards
@@ -186,7 +197,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
             const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
             const ownerId = app.pan_cards?.owner_id;
             const usedForThisOwner = ownerId ? (usedCardsByOwner.get(ownerId) ?? new Set<string>()) : new Set<string>();
-            const availablePanCardsForRow = (myPanCards ?? []).filter((p) => !usedForThisOwner.has(p.id));
+            const availablePanCardsForRow = myAppliedPanCards.filter((p) => !usedForThisOwner.has(p.id));
             const canJoin =
               !isOwner && !isCoMember && app.allotment_status === "pending" && availablePanCardsForRow.length > 0;
             const canLeave = !isOwner && isCoMember;
