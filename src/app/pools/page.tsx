@@ -7,7 +7,10 @@ import { colorFromSeed } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-type PoolWithMembers = Pool & { pool_members: { profiles: { display_name: string } | null }[] };
+type PoolWithMembers = Pool & {
+  pool_members: { profiles: { display_name: string } | null }[];
+  ipos: { listing_date: string | null; open_date: string | null } | null;
+};
 
 export default async function PoolsPage() {
   const { supabase, user } = await requireUser();
@@ -15,8 +18,9 @@ export default async function PoolsPage() {
   const [{ data: pools }, { count: panCount }, { data: ipos }, { data: myMemberships }] = await Promise.all([
     supabase
       .from("pools")
-      .select("id, name, owner_id, invite_code, ipo_id, category, created_at, pool_members(profiles(display_name))")
-      .order("created_at", { ascending: false })
+      .select(
+        "id, name, owner_id, invite_code, ipo_id, category, created_at, pool_members(profiles(display_name)), ipos(listing_date, open_date)",
+      )
       .returns<PoolWithMembers[]>(),
     supabase.from("pan_cards").select("id", { count: "exact", head: true }).eq("owner_id", user.id),
     supabase
@@ -28,10 +32,21 @@ export default async function PoolsPage() {
     supabase.from("pool_members").select("pool_id").eq("profile_id", user.id),
   ]);
 
+  // Descending by IPO listing date, falling back to open date for an IPO
+  // that hasn't listed yet (still upcoming/open, so has no listing date).
+  const sortedPools = [...(pools ?? [])].sort((a, b) => {
+    const aDate = a.ipos?.listing_date ?? a.ipos?.open_date;
+    const bDate = b.ipos?.listing_date ?? b.ipos?.open_date;
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return bDate.localeCompare(aDate);
+  });
+
   const hasPan = (panCount ?? 0) > 0;
   const joinedPoolIds = new Set((myMemberships ?? []).map((m) => m.pool_id));
-  const yourPools = pools?.filter((p) => joinedPoolIds.has(p.id)) ?? [];
-  const otherPools = pools?.filter((p) => !joinedPoolIds.has(p.id)) ?? [];
+  const yourPools = sortedPools.filter((p) => joinedPoolIds.has(p.id));
+  const otherPools = sortedPools.filter((p) => !joinedPoolIds.has(p.id));
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
