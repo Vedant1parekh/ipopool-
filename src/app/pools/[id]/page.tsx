@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
 import { maskPan, type ApplicationMember, type PanCard } from "@/lib/types";
 import { ApplicationForm, ClubButton, RemovePoolButton } from "./application-form";
+import { BackButton } from "@/components/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -155,6 +156,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+      <BackButton />
       <div className="flex items-start justify-between gap-3">
         <h1 className="text-2xl font-semibold">{pool.name}</h1>
         {members?.some((m) => m.profile_id === user.id) && (

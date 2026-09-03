@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
 import type { IpoDetails } from "@/lib/types";
+import { BackButton } from "@/components/back-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,6 +33,7 @@ export default async function IpoDetailsPage({ params }: { params: Promise<{ id:
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+      <BackButton />
       <div className="mb-6 flex items-start gap-4">
         {ipo.logo_url && (
           // eslint-disable-next-line @next/next/no-img-element
