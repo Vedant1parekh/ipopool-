@@ -260,15 +260,16 @@ export async function clubOnApplication(poolId: string, applicationId: string, p
   return { error: null };
 }
 
-// Undo clubbing — always allowed, even after the allotment result is in.
+// Undo clubbing — blocked while the IPO is closed and awaiting allotment,
+// same as the leave button's own disabled state. Also removes the
+// reciprocal club-in created by club_in_with_reciprocal, if any — a plain
+// delete of just the caller's own row would leave that side orphaned,
+// since removing someone else's row needs to bypass "auth.uid() =
+// profile_id" (see unclub_with_reciprocal, SECURITY DEFINER).
 export async function unclubFromApplication(poolId: string, applicationId: string) {
-  const { supabase, user } = await requireUser();
+  const { supabase } = await requireUser();
 
-  const { error } = await supabase
-    .from("pool_application_members")
-    .delete()
-    .eq("application_id", applicationId)
-    .eq("profile_id", user.id);
+  const { error } = await supabase.rpc("unclub_with_reciprocal", { p_application_id: applicationId });
 
   if (error) {
     return { error: error.message };
