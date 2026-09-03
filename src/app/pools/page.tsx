@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/supabase/require-user";
 import type { Ipo, Pool } from "@/lib/types";
 import { CreatePoolForm, JoinPoolForm, QuickJoinButton } from "./pool-forms";
 import { Badge } from "@/components/ui/badge";
+import { colorFromSeed } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -93,11 +94,21 @@ function PoolRow({
 }) {
   const memberNames = (pool.pool_members ?? []).map((m) => m.profiles?.display_name ?? "Member");
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
-      <Link href={`/pools/${pool.id}`} className="flex flex-1 flex-col hover:underline">
-        <span className="font-medium">{pool.name}</span>
-        <span className="text-xs text-muted-foreground">
-          {memberNames.length > 0 ? memberNames.join(", ") : "No members yet"}
+    <div
+      className="flex items-center justify-between gap-3 rounded-lg border border-l-4 p-3 text-sm"
+      style={{ borderLeftColor: colorFromSeed(pool.ipo_id) }}
+    >
+      <Link href={`/pools/${pool.id}`} className="flex flex-1 items-start gap-2 hover:underline">
+        <span
+          aria-hidden
+          className="mt-1.5 size-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: colorFromSeed(pool.ipo_id) }}
+        />
+        <span className="flex flex-col">
+          <span className="font-medium">{pool.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {memberNames.length > 0 ? memberNames.join(", ") : "No members yet"}
+          </span>
         </span>
       </Link>
       <Badge variant="secondary" className="uppercase">

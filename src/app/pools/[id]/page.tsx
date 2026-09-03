@@ -5,6 +5,7 @@ import { ApplicationForm, ClubButton, RemoveApplicationButton, RemovePoolButton 
 import { BackButton } from "@/components/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { colorFromSeed } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +159,10 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
       <BackButton />
       <div className="flex items-start justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{pool.name}</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold">
+          <span aria-hidden className="size-3 shrink-0 rounded-full" style={{ backgroundColor: colorFromSeed(pool.ipo_id) }} />
+          {pool.name}
+        </h1>
         {members?.some((m) => m.profile_id === user.id) && (
           <RemovePoolButton poolId={id} disabledReason={removeDisabledReason} />
         )}
