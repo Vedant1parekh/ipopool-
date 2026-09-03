@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
 import { maskPan, type ApplicationMember, type PanCard } from "@/lib/types";
-import { ApplicationForm, ClubButton, RemovePoolButton } from "./application-form";
+import { ApplicationForm, ClubButton, RemoveApplicationButton, RemovePoolButton } from "./application-form";
 import { BackButton } from "@/components/back-button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -272,6 +272,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                             {coMemberIdentifiers.length > 0 ? coMemberIdentifiers.join(", ") : "—"}
                           </TableCell>
                           <TableCell>
+                            {isOwner && <RemoveApplicationButton poolId={id} applicationId={app.id} />}
                             {(canJoin || canLeave) && (
                               <ClubButton
                                 poolId={id}

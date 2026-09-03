@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { addApplication, clubOnApplication, removePool, unclubFromApplication } from "../actions";
+import { addApplication, clubOnApplication, removeApplication, removePool, unclubFromApplication } from "../actions";
 import type { PanCard } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -66,6 +66,57 @@ export function RemovePoolButton({ poolId, disabledReason }: { poolId: string; d
               }}
             >
               Remove pool
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+// Applicant-only. Deletes the row outright — unlike marking it "na", this
+// actually frees the PAN to apply under a different category of the same
+// IPO, since the cross-category check looks at row existence, not status.
+export function RemoveApplicationButton({ poolId, applicationId }: { poolId: string; applicationId: string }) {
+  const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, _formData: FormData) => {
+    return (await removeApplication(poolId, applicationId)) ?? initialState;
+  }, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  return (
+    <>
+      <form ref={formRef} action={formAction} className="flex flex-col items-end gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="text-muted-foreground hover:text-destructive"
+          disabled={pending}
+          onClick={() => setConfirmOpen(true)}
+        >
+          {pending ? "Removing..." : "Remove"}
+        </Button>
+        {state.error && <p className="text-xs text-destructive">{state.error}</p>}
+      </form>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this application?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes your application from this pool, freeing this PAN to apply under a different category
+              for the same IPO. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmOpen(false);
+                formRef.current?.requestSubmit();
+              }}
+            >
+              Remove
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

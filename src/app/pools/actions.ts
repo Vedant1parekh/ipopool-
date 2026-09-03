@@ -127,6 +127,39 @@ export async function removePool(poolId: string) {
   redirect("/pools");
 }
 
+// Shared guard for anything that stops an application being "applied" —
+// flipping it to na, or removing it outright. Both would silently strand
+// a club-in: one on this application (someone clubbed onto it), or one
+// this PAN itself made onto someone else's application (which requires
+// status "applied" to have been eligible in the first place).
+async function blockedFromUnapplying(
+  supabase: Awaited<ReturnType<typeof requireUser>>["supabase"],
+  poolId: string,
+  applicationId: string,
+  panCardId: string,
+) {
+  const { count: hasClubMembers } = await supabase
+    .from("pool_application_members")
+    .select("profile_id", { count: "exact", head: true })
+    .eq("application_id", applicationId);
+
+  if (hasClubMembers) {
+    return "Other members are clubbed onto this application — remove their club-ins first.";
+  }
+
+  const { count: usedToClubElsewhere } = await supabase
+    .from("pool_application_members")
+    .select("application_id, pool_applications!inner(pool_id)", { count: "exact", head: true })
+    .eq("pan_card_id", panCardId)
+    .eq("pool_applications.pool_id", poolId);
+
+  if (usedToClubElsewhere) {
+    return "This PAN has already clubbed onto another application in this pool — remove that club-in first.";
+  }
+
+  return null;
+}
+
 export async function addApplication(poolId: string, formData: FormData) {
   const { supabase, user } = await requireUser();
 
@@ -160,31 +193,9 @@ export async function addApplication(poolId: string, formData: FormData) {
     .maybeSingle();
 
   if (existing && status !== "applied") {
-    const { count: hasClubMembers } = await supabase
-      .from("pool_application_members")
-      .select("profile_id", { count: "exact", head: true })
-      .eq("application_id", existing.id);
-
-    if (hasClubMembers) {
-      return {
-        error: "Other members are clubbed onto this application — remove their club-ins before marking it not applicable.",
-      };
-    }
-
-    // The other direction: this PAN itself may have been used to club onto
-    // someone ELSE's application in this pool. Club-in eligibility requires
-    // status "applied", so flipping this PAN away from "applied" would
-    // silently leave that club-in resting on a PAN that's no longer applied.
-    const { count: usedToClubElsewhere } = await supabase
-      .from("pool_application_members")
-      .select("application_id, pool_applications!inner(pool_id)", { count: "exact", head: true })
-      .eq("pan_card_id", panCardId)
-      .eq("pool_applications.pool_id", poolId);
-
-    if (usedToClubElsewhere) {
-      return {
-        error: "This PAN has already clubbed onto another application in this pool — it cannot be marked not applicable.",
-      };
+    const blockedReason = await blockedFromUnapplying(supabase, poolId, existing.id, panCardId);
+    if (blockedReason) {
+      return { error: blockedReason };
     }
   }
 
@@ -215,6 +226,39 @@ export async function addApplication(poolId: string, formData: FormData) {
         status,
         created_by: user.id,
       });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/pools/${poolId}`);
+  return { error: null };
+}
+
+// Deletes the application outright, unlike marking it "na" — that still
+// leaves the row in place, which still blocks this PAN from applying under
+// a different category of the same IPO (the cross-category check looks at
+// row existence, not status). A genuine mistake needs a genuine delete.
+export async function removeApplication(poolId: string, applicationId: string) {
+  const { supabase, user } = await requireUser();
+
+  const { data: application } = await supabase
+    .from("pool_applications")
+    .select("id, pan_card_id, pan_cards!inner(owner_id)")
+    .eq("id", applicationId)
+    .eq("pool_id", poolId)
+    .single<{ id: string; pan_card_id: string; pan_cards: { owner_id: string } | null }>();
+
+  if (!application || application.pan_cards?.owner_id !== user.id) {
+    return { error: "Only the applicant can remove this application." };
+  }
+
+  const blockedReason = await blockedFromUnapplying(supabase, poolId, applicationId, application.pan_card_id);
+  if (blockedReason) {
+    return { error: blockedReason };
+  }
+
+  const { error } = await supabase.from("pool_applications").delete().eq("id", applicationId);
 
   if (error) {
     return { error: error.message };
