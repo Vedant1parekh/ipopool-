@@ -13,10 +13,12 @@ const selectClass =
 export function PoolProfitRow({
   applicationId,
   memberCount,
+  editable,
   initial,
 }: {
   applicationId: string;
   memberCount: number;
+  editable: boolean;
   initial: {
     amountDeducted: number | null;
     amountReceived: number | null;
@@ -53,6 +55,7 @@ export function PoolProfitRow({
           onChange={(e) => setDeducted(e.target.value)}
           type="number"
           step="0.01"
+          disabled={!editable}
           className="h-8 w-24"
         />
       </TableCell>
@@ -62,6 +65,7 @@ export function PoolProfitRow({
           onChange={(e) => setReceived(e.target.value)}
           type="number"
           step="0.01"
+          disabled={!editable}
           className="h-8 w-24"
         />
       </TableCell>
@@ -80,6 +84,7 @@ export function PoolProfitRow({
         <select
           value={paymentStatus}
           onChange={(e) => setPaymentStatus(e.target.value)}
+          disabled={!editable}
           className={selectClass}
         >
           <option value="pending">Pending</option>
@@ -91,14 +96,21 @@ export function PoolProfitRow({
           value={remarks}
           onChange={(e) => setRemarks(e.target.value)}
           placeholder="Remarks"
+          disabled={!editable}
           className="h-8 w-32"
         />
       </TableCell>
       <TableCell>
-        <Button size="sm" disabled={pending} onClick={() => formAction()}>
-          {pending ? "Saving..." : "Save"}
-        </Button>
-        {state.error && <p className="text-xs text-destructive">{state.error}</p>}
+        {editable ? (
+          <>
+            <Button size="sm" disabled={pending} onClick={() => formAction()}>
+              {pending ? "Saving..." : "Save"}
+            </Button>
+            {state.error && <p className="text-xs text-destructive">{state.error}</p>}
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">Applicant only</span>
+        )}
       </TableCell>
     </>
   );

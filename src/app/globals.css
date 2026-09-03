@@ -56,11 +56,11 @@
    Green/amber/red are reserved for profit / pending / loss meanings and
    are never reused as the general brand color. */
 :root {
-  --background: oklch(1 0 0);
+  --background: oklch(0.985 0.007 75);
   --foreground: oklch(0.18 0.01 260);
-  --card: oklch(1 0 0);
+  --card: oklch(0.985 0.007 75);
   --card-foreground: oklch(0.18 0.01 260);
-  --popover: oklch(1 0 0);
+  --popover: oklch(0.985 0.007 75);
   --popover-foreground: oklch(0.18 0.01 260);
   --primary: oklch(0.4 0.15 260);
   --primary-foreground: oklch(0.985 0 0);

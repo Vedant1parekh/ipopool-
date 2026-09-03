@@ -56,3 +56,9 @@ export type ApplicationMember = {
   profiles: { display_name: string } | null;
   pan_cards: { pan_number: string; label: string | null } | null;
 };
+
+// Only the first and last character stay visible, e.g. "ABCDE1234F" -> "A********F".
+export function maskPan(pan: string) {
+  if (pan.length <= 2) return pan;
+  return `${pan[0]}${"*".repeat(pan.length - 2)}${pan[pan.length - 1]}`;
+}

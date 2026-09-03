@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/supabase/require-user";
-import type { ApplicationMember, PanCard } from "@/lib/types";
+import { maskPan, type ApplicationMember, type PanCard } from "@/lib/types";
 import { ApplicationForm, ClubButton, RemovePoolButton } from "./application-form";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -187,7 +187,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
               <div className="flex flex-wrap gap-2">
                 {(panCardsByMember.get(m.profile_id) ?? []).map((card) => (
                   <span key={card.pan_number} className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs">
-                    {card.pan_number}
+                    {maskPan(card.pan_number)}
                     {card.label && <span className="ml-1 text-muted-foreground">({card.label})</span>}
                   </span>
                 ))}
@@ -231,7 +231,7 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                       // Co-members only — the applicant is already the row itself.
                       const coMemberIdentifiers = app.pool_application_members.map((m) =>
                         m.pan_cards
-                          ? (m.pan_cards.label ?? m.pan_cards.pan_number)
+                          ? (m.pan_cards.label ?? maskPan(m.pan_cards.pan_number))
                           : (m.profiles?.display_name ?? "Member"),
                       );
                       const isOwner = app.pan_cards?.owner_id === user.id;
@@ -256,7 +256,9 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                       return (
                         <TableRow key={app.id}>
                           <TableCell>
-                            <span className="font-mono">{app.pan_cards?.pan_number ?? "—"}</span>
+                            <span className="font-mono">
+                              {app.pan_cards ? maskPan(app.pan_cards.pan_number) : "—"}
+                            </span>
                             {app.pan_cards?.label && (
                               <span className="ml-2 text-xs text-muted-foreground">{app.pan_cards.label}</span>
                             )}

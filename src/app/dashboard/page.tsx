@@ -32,14 +32,23 @@ export default async function DashboardPage({
   const { type } = await searchParams;
   const activeType: IpoType = type === "sme" ? "sme" : "mainboard";
 
-  const { data: ipos, error } = await supabase
+  // Only open and closed IPOs show here — upcoming isn't actionable yet,
+  // and listed drops off on its own: the sync job (src/lib/ipo-sync.ts)
+  // flips a closed IPO to listed the day after its listing_date passes,
+  // so excluding listed here is exactly "remove it one day after listing."
+  const { data, error } = await supabase
     .from("ipos")
     .select(
       "id, name, type, open_date, close_date, listing_date, price_band_min, price_band_max, lot_size, status, logo_url",
     )
     .eq("type", activeType)
+    .in("status", ["open", "closed"])
     .order("open_date", { ascending: true })
     .returns<DashboardIpo[]>();
+
+  // Open first, then closed — stable sort keeps each group's open_date order.
+  const statusRank: Record<string, number> = { open: 0, closed: 1 };
+  const ipos = data ? [...data].sort((a, b) => statusRank[a.status] - statusRank[b.status]) : data;
 
   // TEMPORARY test UI — remove once manual testing of the sync is done.
   // Reflects live state on every visit to this page (not just right after

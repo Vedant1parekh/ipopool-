@@ -53,7 +53,8 @@ export default async function ProfitLossPage() {
       <h1 className="text-2xl font-semibold">My Profit &amp; Loss</h1>
       <p className="mb-6 text-sm text-muted-foreground">
         One row per alloted application you&apos;re part of (as owner or clubbed member). Deducted/received amounts,
-        payment status, and remarks are shared and editable by anyone clubbed onto that application.
+        payment status, and remarks are visible to everyone on the row, but only the applicant can edit and save
+        them.
       </p>
 
       <div className="mb-4 rounded-lg bg-muted p-4 text-sm">
@@ -115,6 +116,7 @@ export default async function ProfitLossPage() {
                     <PoolProfitRow
                       applicationId={row.id}
                       memberCount={memberCount}
+                      editable={isApplicant}
                       initial={{
                         amountDeducted: row.amount_deducted,
                         amountReceived: row.amount_received,
