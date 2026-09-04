@@ -103,8 +103,27 @@ export default async function AllotmentsPage({
 
       {selectedIpoId && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle>Applications</CardTitle>
+            {(() => {
+              const selectedIpo = ipos?.find((ipo) => ipo.id === selectedIpoId);
+              if (!selectedIpo) return null;
+              // No reliable way to deep-link straight to the right registrar's
+              // page per IPO (that needs a registrar id we don't have, and
+              // isn't derivable from the IPO name) - a search link works for
+              // every IPO without tracking which registrar handled it.
+              const query = encodeURIComponent(`${selectedIpo.name} ipo allotment status`);
+              return (
+                <a
+                  href={`https://www.google.com/search?q=${query}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary underline whitespace-nowrap"
+                >
+                  Check allotment status ↗
+                </a>
+              );
+            })()}
           </CardHeader>
           <CardContent>
             <Table>
