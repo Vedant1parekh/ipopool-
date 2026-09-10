@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/supabase/require-user";
-import type { ApplicationMember } from "@/lib/types";
+import type { AllotmentRecord, AllotmentRecordMember } from "@/lib/types";
 import { PoolProfitRow } from "./pool-profit-row";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -13,38 +13,38 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type PoolApplicationFinancialRow = {
-  id: string;
-  amount_deducted: number | null;
-  amount_received: number | null;
-  net_profit: number | null;
-  payment_status: string;
-  remarks: string | null;
-  pools: { name: string; ipos: { name: string; listing_date: string | null; status: string } | null } | null;
-  pan_cards: { owner_id: string; profiles: { display_name: string } | null } | null;
-  pool_application_members: ApplicationMember[];
-  last_modified_by: string | null;
-};
-
 export default async function ProfitLossPage() {
   const { supabase, user } = await requireUser();
 
-  const { data: rows } = await supabase
-    .from("pool_applications")
-    .select(
-      "id, amount_deducted, amount_received, net_profit, payment_status, remarks, last_modified_by, pools!inner(name, ipos!inner(name, listing_date, status)), pan_cards(owner_id, profiles(display_name)), pool_application_members(profile_id, profiles(display_name))",
-    )
-    .eq("allotment_status", "alloted")
-    .in("pools.ipos.status", ["closed", "listed"])
-    .order("created_at", { ascending: false })
-    .returns<PoolApplicationFinancialRow[]>();
+  // Reads the permanent snapshot (see migration 0029) instead of
+  // pool_applications directly — RLS already restricts rows to ones the
+  // viewer is the applicant or a clubbed member of, and unlike the live
+  // table this doesn't disappear once the pool that produced it is
+  // removed: an alloted result is a fact of record, kept forever.
+  const { data: records } = await supabase
+    .from("allotment_records")
+    .select("*")
+    .order("alloted_at", { ascending: false })
+    .returns<AllotmentRecord[]>();
 
-  const myRows = (rows ?? []).filter(
-    (r) => r.pan_cards?.owner_id === user.id || r.pool_application_members.some((m) => m.profile_id === user.id),
-  );
+  const myRecords = records ?? [];
+  const recordIds = myRecords.map((r) => r.id);
+  const { data: recordMembers } = recordIds.length
+    ? await supabase
+        .from("allotment_record_members")
+        .select("*")
+        .in("allotment_record_id", recordIds)
+        .returns<AllotmentRecordMember[]>()
+    : { data: [] as AllotmentRecordMember[] };
+  const membersByRecord = new Map<string, AllotmentRecordMember[]>();
+  for (const m of recordMembers ?? []) {
+    const list = membersByRecord.get(m.allotment_record_id) ?? [];
+    list.push(m);
+    membersByRecord.set(m.allotment_record_id, list);
+  }
 
-  const totalNet = myRows.reduce((sum, r) => {
-    const memberCount = 1 + r.pool_application_members.length;
+  const totalNet = myRecords.reduce((sum, r) => {
+    const memberCount = 1 + (membersByRecord.get(r.id)?.length ?? 0);
     return sum + (r.net_profit !== null ? Number(r.net_profit) / memberCount : 0);
   }, 0);
 
@@ -52,9 +52,10 @@ export default async function ProfitLossPage() {
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
       <h1 className="text-2xl font-semibold">My Profit &amp; Loss</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        One row per alloted application you&apos;re part of (as owner or clubbed member). Deducted/received amounts,
-        payment status, and remarks are visible to everyone on the row, but only the applicant can edit and save
-        them.
+        One row per alloted application you&apos;re part of (as owner or clubbed member) — kept here permanently,
+        even after the pool it came from is removed. Deducted/received amounts and payment status are visible to
+        everyone on the row, but only the applicant can edit and save them, and only while the pool it came from
+        still exists.
       </p>
 
       <div className="mb-4 rounded-lg bg-muted p-4 text-sm">
@@ -82,23 +83,26 @@ export default async function ProfitLossPage() {
                 <TableHead>Split</TableHead>
                 <TableHead>Per person</TableHead>
                 <TableHead>Payment</TableHead>
-                <TableHead>Remarks</TableHead>
                 <TableHead>Save</TableHead>
-                <TableHead>Last modified by</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {myRows.map((row) => {
-                const coMemberNames = row.pool_application_members.map((m) => m.profiles?.display_name ?? "Member");
-                const memberNames = [row.pan_cards?.profiles?.display_name ?? "Unknown", ...coMemberNames];
+              {myRecords.map((row) => {
+                const coMemberNames = (membersByRecord.get(row.id) ?? []).map((m) => m.member_name);
+                const memberNames = [row.applicant_name, ...coMemberNames];
                 const memberCount = memberNames.length;
-                const isApplicant = row.pan_cards?.owner_id === user.id;
+                const isApplicant = row.applicant_profile_id === user.id;
+                // Editing writes back to the live pool_applications row —
+                // once the pool is gone (application_id null'd out by
+                // migration 0029's soft link), this becomes a read-only
+                // historical record.
+                const editable = isApplicant && row.application_id !== null;
 
                 return (
                   <TableRow key={row.id}>
-                    <TableCell>{row.pan_cards?.profiles?.display_name ?? "—"}</TableCell>
-                    <TableCell>{row.pools?.ipos?.name ?? "—"}</TableCell>
-                    <TableCell>{row.pools?.ipos?.listing_date ?? "—"}</TableCell>
+                    <TableCell>{row.applicant_name}</TableCell>
+                    <TableCell>{row.ipo_name}</TableCell>
+                    <TableCell>{row.listing_date ?? "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{memberNames.join(", ")}</TableCell>
                     <TableCell className="text-xs">
                       {coMemberNames.length === 0 ? (
@@ -108,15 +112,13 @@ export default async function ProfitLossPage() {
                           You need to pay: {coMemberNames.join(", ")}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">
-                          {row.pan_cards?.profiles?.display_name ?? "Applicant"} owes you a share
-                        </span>
+                        <span className="text-muted-foreground">{row.applicant_name} owes you a share</span>
                       )}
                     </TableCell>
                     <PoolProfitRow
-                      applicationId={row.id}
+                      applicationId={row.application_id}
                       memberCount={memberCount}
-                      editable={isApplicant}
+                      editable={editable}
                       initial={{
                         amountDeducted: row.amount_deducted,
                         amountReceived: row.amount_received,
@@ -124,13 +126,12 @@ export default async function ProfitLossPage() {
                         remarks: row.remarks,
                       }}
                     />
-                    <TableCell className="text-xs text-muted-foreground">{row.last_modified_by ?? "—"}</TableCell>
                   </TableRow>
                 );
               })}
-              {myRows.length === 0 && (
+              {myRecords.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={16} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={14} className="py-6 text-center text-muted-foreground">
                     No alloted applications yet — this fills in once an application you&apos;re part of is marked
                     Alloted on the Allotments page.
                   </TableCell>

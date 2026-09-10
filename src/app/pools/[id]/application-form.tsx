@@ -77,12 +77,28 @@ export function RemovePoolButton({ poolId, disabledReason }: { poolId: string; d
 // Applicant-only. Deletes the row outright — unlike marking it "na", this
 // actually frees the PAN to apply under a different category of the same
 // IPO, since the cross-category check looks at row existence, not status.
-export function RemoveApplicationButton({ poolId, applicationId }: { poolId: string; applicationId: string }) {
+//
+// blockedReason mirrors the server's blockedFromUnapplying guard: when set
+// (a co-member is clubbed onto this application, or this PAN itself is
+// clubbed onto someone else's in this pool), the button still opens a
+// dialog, but one that explains why removal isn't possible instead of
+// asking for confirmation — clicking through would just bounce off the
+// server's own check, so this catches it up front with a clearer message.
+export function RemoveApplicationButton({
+  poolId,
+  applicationId,
+  blockedReason,
+}: {
+  poolId: string;
+  applicationId: string;
+  blockedReason?: string;
+}) {
   const [state, formAction, pending] = useActionState(async (_prev: typeof initialState, _formData: FormData) => {
     return (await removeApplication(poolId, applicationId)) ?? initialState;
   }, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
 
   return (
     <>
@@ -93,7 +109,7 @@ export function RemoveApplicationButton({ poolId, applicationId }: { poolId: str
           variant="ghost"
           className="text-muted-foreground hover:text-destructive"
           disabled={pending}
-          onClick={() => setConfirmOpen(true)}
+          onClick={() => (blockedReason ? setBlockedOpen(true) : setConfirmOpen(true))}
         >
           {pending ? "Removing..." : "Remove"}
         </Button>
@@ -118,6 +134,17 @@ export function RemoveApplicationButton({ poolId, applicationId }: { poolId: str
             >
               Remove
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={blockedOpen} onOpenChange={setBlockedOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Can&apos;t remove this PAN</AlertDialogTitle>
+            <AlertDialogDescription>{blockedReason}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setBlockedOpen(false)}>Got it</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

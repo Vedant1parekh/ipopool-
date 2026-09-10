@@ -57,6 +57,46 @@ export type ApplicationMember = {
   pan_cards: { pan_number: string; label: string | null } | null;
 };
 
+// A permanent snapshot of an alloted application (see migration 0029) —
+// frozen at alloted-time and kept in sync with amount/payment/remarks
+// edits for as long as the source pool_applications row still exists.
+// application_id/pool_id turn null once the source pool is deleted; the
+// row itself never is, so this is what the Allotments and Profit & Loss
+// pages fall back to once a pool is gone.
+export type AllotmentRecord = {
+  id: string;
+  application_id: string | null;
+  pool_id: string | null;
+  ipo_id: string | null;
+  pan_card_id: string | null;
+  pool_name: string;
+  ipo_name: string;
+  listing_date: string | null;
+  category: ApplicationCategory;
+  pan_number: string;
+  pan_label: string | null;
+  applicant_profile_id: string;
+  applicant_name: string;
+  amount_deducted: number | null;
+  amount_received: number | null;
+  gross_profit: number | null;
+  tax: number | null;
+  net_profit: number | null;
+  payment_status: string;
+  remarks: string | null;
+  last_modified_by: string | null;
+  alloted_at: string;
+};
+
+export type AllotmentRecordMember = {
+  allotment_record_id: string;
+  profile_id: string;
+  member_name: string;
+  pan_card_id: string | null;
+  pan_number: string | null;
+  pan_label: string | null;
+};
+
 // Only the first and last character stay visible, e.g. "ABCDE1234F" -> "A********F".
 export function maskPan(pan: string) {
   if (pan.length <= 2) return pan;

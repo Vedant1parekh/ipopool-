@@ -145,6 +145,24 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
     usedCardsByOwner.set(ownerId, used);
   }
 
+  // Removing an application would strand any club-in riding on it, so the
+  // Remove button says so up front (in a dialog) instead of letting the
+  // server reject the submit. Mirrors blockedFromUnapplying in the actions:
+  // the other shape of the block is this PAN having clubbed onto someone
+  // else's application in this pool, so map each clubbed-in card to the
+  // application it went onto.
+  const clubbedOntoByPanCard = new Map<string, string>();
+  for (const app of applications ?? []) {
+    const target = app.pan_cards
+      ? `${app.pan_cards.profiles?.display_name ?? "another member"}'s application (${
+          app.pan_cards.label ?? maskPan(app.pan_cards.pan_number)
+        })`
+      : "another application";
+    for (const member of app.pool_application_members) {
+      if (member.pan_card_id) clubbedOntoByPanCard.set(member.pan_card_id, target);
+    }
+  }
+
   // One table per applicant, instead of one long undifferentiated list —
   // easier to scan when someone has applied with several PAN cards.
   const applicationsByOwner = new Map<string, ApplicationRow[]>();
@@ -242,6 +260,14 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                       );
                       const isOwner = app.pan_cards?.owner_id === user.id;
                       const isCoMember = app.pool_application_members.some((m) => m.profile_id === user.id);
+                      // Mirrors blockedFromUnapplying: removing would strand either a
+                      // co-member clubbed onto this application, or this PAN's own
+                      // club-in onto someone else's application in this pool.
+                      const removeBlockedReason = app.pool_application_members.length > 0
+                        ? "Other members are clubbed onto this application — remove their club-ins first."
+                        : app.pan_cards && clubbedOntoByPanCard.has(app.pan_cards.id)
+                          ? `This PAN is clubbed onto ${clubbedOntoByPanCard.get(app.pan_cards.id)} — remove that club-in first.`
+                          : undefined;
                       const rowOwnerId = app.pan_cards?.owner_id;
                       const usedForThisOwner = rowOwnerId
                         ? (usedCardsByOwner.get(rowOwnerId) ?? new Set<string>())
@@ -276,7 +302,13 @@ export default async function PoolDetailPage({ params }: { params: Promise<{ id:
                             {coMemberIdentifiers.length > 0 ? coMemberIdentifiers.join(", ") : "—"}
                           </TableCell>
                           <TableCell>
-                            {isOwner && <RemoveApplicationButton poolId={id} applicationId={app.id} />}
+                            {isOwner && (
+                              <RemoveApplicationButton
+                                poolId={id}
+                                applicationId={app.id}
+                                blockedReason={removeBlockedReason}
+                              />
+                            )}
                             {(canJoin || canLeave) && (
                               <ClubButton
                                 poolId={id}
