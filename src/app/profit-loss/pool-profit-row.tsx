@@ -16,7 +16,10 @@ export function PoolProfitRow({
   editable,
   initial,
 }: {
-  applicationId: string;
+  // Null once the pool this record came from has been removed — editable
+  // is always false in that case (see profit-loss/page.tsx), but the type
+  // still needs to allow it since the row itself stays visible forever.
+  applicationId: string | null;
   memberCount: number;
   editable: boolean;
   initial: {
@@ -29,9 +32,14 @@ export function PoolProfitRow({
   const [deducted, setDeducted] = useState(initial.amountDeducted?.toString() ?? "");
   const [received, setReceived] = useState(initial.amountReceived?.toString() ?? "");
   const [paymentStatus, setPaymentStatus] = useState(initial.paymentStatus);
-  const [remarks, setRemarks] = useState(initial.remarks ?? "");
+  // No longer an editable field on this page (the Remarks column was
+  // dropped), but kept so a save doesn't blank out a value entered before.
+  const [remarks] = useState(initial.remarks ?? "");
 
   const [state, formAction, pending] = useActionState(async () => {
+    if (!applicationId) {
+      return { error: "This record's pool was removed — it can no longer be edited." };
+    }
     return (
       (await setApplicationFinancials(applicationId, {
         amountDeducted: Number(deducted) || 0,
@@ -90,15 +98,6 @@ export function PoolProfitRow({
           <option value="pending">Pending</option>
           <option value="done">Done</option>
         </select>
-      </TableCell>
-      <TableCell>
-        <Input
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
-          placeholder="Remarks"
-          disabled={!editable}
-          className="h-8 w-32"
-        />
       </TableCell>
       <TableCell>
         {editable ? (
