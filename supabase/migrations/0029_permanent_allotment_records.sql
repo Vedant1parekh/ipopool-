@@ -54,12 +54,27 @@ create table public.allotment_records (
   created_at timestamptz not null default now()
 );
 
+-- ============================================================
+-- allotment_record_members: frozen clubbing roster for a record. Created
+-- right after allotment_records (before either table's RLS/policies) since
+-- allotment_records' own SELECT policy below needs to reference it.
+-- ============================================================
+create table public.allotment_record_members (
+  allotment_record_id uuid not null references public.allotment_records (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  member_name text not null,
+  pan_card_id uuid references public.pan_cards (id) on delete set null,
+  pan_number text,
+  pan_label text,
+  primary key (allotment_record_id, profile_id)
+);
+
 alter table public.allotment_records enable row level security;
 
 -- Same audience as the Profit & Loss / Allotments pages today: the
 -- applicant, or anyone clubbed onto the application — but resolved from
--- this table's own frozen membership roster (below), not live pool
--- membership, since that's exactly what disappears with the pool.
+-- this table's own frozen membership roster, not live pool membership,
+-- since that's exactly what disappears with the pool.
 create policy "applicant and clubbed members can view an allotment record"
   on public.allotment_records for select
   using (
@@ -74,19 +89,6 @@ create policy "applicant and clubbed members can view an allotment record"
 -- through sync_allotment_record() below (SECURITY DEFINER), so this table
 -- is effectively append/sync-only from the app's perspective and can never
 -- be edited or deleted by a client query, including the applicant's own.
-
--- ============================================================
--- allotment_record_members: frozen clubbing roster for a record
--- ============================================================
-create table public.allotment_record_members (
-  allotment_record_id uuid not null references public.allotment_records (id) on delete cascade,
-  profile_id uuid not null references public.profiles (id) on delete cascade,
-  member_name text not null,
-  pan_card_id uuid references public.pan_cards (id) on delete set null,
-  pan_number text,
-  pan_label text,
-  primary key (allotment_record_id, profile_id)
-);
 
 alter table public.allotment_record_members enable row level security;
 
